@@ -127,7 +127,11 @@ clickaway)
     cm=$(hyprctl monitors -j | jq -r --argjson x "$cx" --argjson y "$cy" '.[] | select($x >= .x and $x < .x + .width and $y >= .y and $y < .y + .height) | .name' | head -1)
     [ -n "$cm" ] || exit 0
     name=$(panel_on "$cm"); [ -n "$name" ] && is_panel "$name" || exit 0   # only the panel on the clicked monitor
-    [ "$(age "$name" toggled)" -lt 1000 ] && exit 0                          # this click toggled it
+    # "launching" stamps 60 s ahead; once the window exists (panel shown) that guard is over, or clicks stay ignored for a minute
+    if [ "$(age "$name" toggled)" -lt 0 ]; then read -r a _ < <(win_of "$name"); [ -n "${a:-}" ] && echo $(( $(now) - 1000 )) > "$R/side-panel-$name-toggled"; fi
+    # only a click on the bar (a panel's own button) can be the click that toggled it; below the bar an outside click always closes
+    my=$(hyprctl monitors -j | jq -r --arg n "$cm" '.[] | select(.name == $n) | .y')
+    [ $(( ${cy%.*} - ${my:-0} )) -lt 46 ] && [ "$(age "$name" toggled)" -lt 1000 ] && exit 0
     inside=$(hyprctl clients -j | jq -r --arg w "special:$name" --argjson x "$cx" --argjson y "$cy" \
         '[.[] | select(.workspace.name == $w and $x >= .at[0] and $x <= .at[0] + .size[0] and $y >= .at[1] and $y <= .at[1] + .size[1])] | length')
     if [ "${inside:-0}" = 0 ]; then now > "$R/side-panel-$name-hidden"; hide "$name" force; fi ;;
