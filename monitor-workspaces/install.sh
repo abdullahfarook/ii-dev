@@ -23,6 +23,7 @@ def sub(f, pattern, new):
     p = qs + "/" + f; s = open(p).read(); open(p, "w").write(re.sub(pattern, lambda _: new, s, flags=re.M))
 sub("modules/common/models/WorkspaceModel.qml", r"^\s*readonly property int shownCount:.*$", "    readonly property int shownCount: C.Config.options.bar.workspaces.shown")
 sub("modules/common/models/WorkspaceModel.qml", r"\Aimport Quickshell\n", "")
+sub("modules/common/models/WorkspaceModel.qml", r'\?\? "special"$', '?? ""')
 sub("modules/ii/background/Background.qml", r"^\s*property int workspaceChunkSize:.*$", "        property int workspaceChunkSize: Config?.options.bar.workspaces.shown ?? 10")
 sub("modules/settings/BarConfig.qml", r'Translation\.tr\("Workspaces shown[^"]*"\)', 'Translation.tr("Workspaces shown (per monitor)")')
 PY
