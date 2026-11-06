@@ -12,6 +12,7 @@ import Quickshell.Io
 WidgetBase {
     id: root
     iconName: "memory"
+    iconSize: 21                        // memory glyph is small in its box: bigger so it matches the globe and cube
     panelId: "task-manager"
 
     panelContent: Component { FocusScope {

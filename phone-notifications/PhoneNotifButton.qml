@@ -14,6 +14,7 @@ import qs.modules.common.widgets
 WidgetBase {
     id: root
     iconName: "smartphone"
+    iconSize: 17                        // tall glyph: height matches globe and cube
     panelId: "phone-notifications"
     iconOpacity: nl.connected && nl.phoneOnline ? 1 : 0.4
 
