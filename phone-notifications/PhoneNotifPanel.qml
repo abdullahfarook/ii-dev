@@ -51,6 +51,24 @@ FocusScope {
         }
         StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
     }
+    component StatusBtn: RippleButton {  // a quick action drawn like the status icons next to it: plain icon, no background
+        id: sb
+        property string symbol
+        property string tip
+        implicitWidth: 26; implicitHeight: 26
+        buttonRadius: Appearance.rounding.full
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        enabled: pn.store.phoneOnline
+        contentItem: MaterialSymbol {
+            horizontalAlignment: Text.AlignHCenter
+            text: sb.symbol
+            iconSize: Appearance.font.pixelSize.larger
+            color: Appearance.colors.colOnLayer2
+            opacity: sb.enabled ? 1 : 0.4
+        }
+        StyledToolTip { text: sb.tip; visible: sb.hovered }
+    }
     component Chip: RippleButton {
         id: chip
         property string label
@@ -193,6 +211,10 @@ FocusScope {
                             StyledToolTip { text: pn.store.link === "usb" ? qsTr("Linked over USB") : pn.store.link === "relay" ? qsTr("Linked over the internet (relay)") : qsTr("Linked over Wi-Fi"); visible: netHover.hovered }
                             HoverHandler { id: netHover }
                         }
+                        StatusBtn { visible: pn.store.connected; symbol: "screen_share"; tip: qsTr("Mirror screen"); onClicked: pn.store.quick("mirror") }
+                        StatusBtn { visible: pn.store.connected; symbol: "send"; tip: qsTr("Send files"); onClicked: pn.store.quick("send-files") }
+                        StatusBtn { visible: pn.store.connected; symbol: "content_paste_go"; tip: qsTr("Send clipboard"); onClicked: pn.store.quick("send-clipboard") }
+                        StatusBtn { visible: pn.store.connected; symbol: "notifications_active"; tip: qsTr("Find phone"); onClicked: pn.store.quick("ring") }
                         Item { Layout.fillWidth: true }
                     }
                 }
@@ -200,33 +222,11 @@ FocusScope {
             }
 
             // ---- list: search, app chips, the feed ----
-            // ---- quick actions (the Home page tiles of NectarLink, icons only) ----
+            // ---- panel actions: History, App rules, Open NectarLink, Clear all ----
             RowLayout {
                 visible: pn.mode === "list" && pn.store.connected
                 Layout.fillWidth: true
                 spacing: 6
-                component QuickBtn: RippleButton {
-                    id: qb
-                    property string symbol
-                    property string tip
-                    implicitWidth: 36; implicitHeight: 36
-                    buttonRadius: Appearance.rounding.full
-                    colBackground: Appearance.colors.colLayer2
-                    colBackgroundHover: Appearance.colors.colLayer2Hover
-                    enabled: pn.store.phoneOnline
-                    contentItem: MaterialSymbol {
-                        horizontalAlignment: Text.AlignHCenter
-                        text: qb.symbol
-                        iconSize: Appearance.font.pixelSize.larger
-                        color: Appearance.colors.colOnLayer2
-                        opacity: qb.enabled ? 1 : 0.4
-                    }
-                    StyledToolTip { text: qb.tip; visible: qb.hovered }
-                }
-                QuickBtn { symbol: "screen_share"; tip: qsTr("Mirror screen"); onClicked: pn.store.quick("mirror") }
-                QuickBtn { symbol: "send"; tip: qsTr("Send files"); onClicked: pn.store.quick("send-files") }
-                QuickBtn { symbol: "content_paste_go"; tip: qsTr("Send clipboard"); onClicked: pn.store.quick("send-clipboard") }
-                QuickBtn { symbol: "notifications_active"; tip: qsTr("Find phone"); onClicked: pn.store.quick("ring") }
                 Item { Layout.fillWidth: true }
                 IconBtn { visible: pn.mode === "list" && pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
                 IconBtn { visible: pn.mode === "list" && pn.store.connected; symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
