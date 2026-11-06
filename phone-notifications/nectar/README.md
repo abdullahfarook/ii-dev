@@ -9,3 +9,4 @@ so the widget draws the notification section exactly like the app. Changes, kept
 - `NotificationItem.qml`: `NotificationList.x()` calls go to `item.list.x()` (the store); `replyInput` alias for the test harness; tighter padding for the narrow panel (card padding 12 -> 6, icon and text 12 -> 6 px from the top, right margin 84 -> 72, the `...` and dismiss buttons 8 -> 3 px from the top).
 
 `fonts/Figtree.ttf` is the app's UI font (SIL OFL 1.1, see `fonts/OFL-Figtree.txt`).
+- Group bar: no stacked-card shapes under a collapsed group (they read as a stray line without the card background); "Show N more" is a text button like "Clear N".

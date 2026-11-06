@@ -218,8 +218,8 @@ FocusScope {
                 spacing: 2
                 IconBtn { symbol: "screen_share"; tip: qsTr("Mirror screen"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("mirror") }
                 IconBtn { symbol: "send"; tip: qsTr("Send files"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("send-files") }
-                IconBtn { symbol: "content_paste_go"; tip: qsTr("Send clipboard"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("send-clipboard") }
-                IconBtn { symbol: "notifications_active"; tip: qsTr("Find phone"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("ring") }
+                IconBtn { symbol: pn.store.doneAction === "send-clipboard" ? "check" : "content_paste_go"; tip: qsTr("Send clipboard"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("send-clipboard") }
+                IconBtn { symbol: pn.store.doneAction === "ring" ? "check" : "notifications_active"; tip: qsTr("Find phone"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("ring") }
                 Item { Layout.fillWidth: true }
                 IconBtn { visible: pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
                 IconBtn { symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
@@ -387,6 +387,29 @@ FocusScope {
                     : qsTr("Esc goes back")
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: Appearance.colors.colSubtext
+            }
+        }
+
+        // ---- short notice after Send clipboard / Find phone ----
+        Rectangle {
+            visible: opacity > 0
+            opacity: pn.store.notice !== "" ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 150 } }
+            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 40 }
+            implicitWidth: noticeRow.implicitWidth + 28; implicitHeight: 38
+            radius: 19
+            color: Appearance.m3colors.m3inverseSurface
+            RowLayout {
+                id: noticeRow
+                anchors.centerIn: parent
+                spacing: 8
+                MaterialSymbol {
+                    text: pn.store.noticeOk ? "check_circle" : "error"
+                    fill: 1
+                    iconSize: Appearance.font.pixelSize.larger
+                    color: pn.store.noticeOk ? "#43a047" : "#ef5350"
+                }
+                StyledText { text: pn.store.notice; color: Appearance.m3colors.m3inverseOnSurface }
             }
         }
 

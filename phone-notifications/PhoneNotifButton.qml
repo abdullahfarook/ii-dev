@@ -20,6 +20,7 @@ WidgetBase {
     readonly property int count: nl.connected ? nl.count : 0   // read by the bar slot (shown while there are notifications)
     PhoneNotifStore { id: nl; open: root.open }
     onOpenChanged: if (open) nl.onOpened()
+    Connections { target: nl; function onRequestClose() { root.close() } }   // an action that opens a window
 
     // Right-click menu: open NectarLink, start it, history on/off
     menuContent: Component { ColumnLayout {

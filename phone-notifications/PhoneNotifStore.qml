@@ -65,7 +65,37 @@ Item {
         else if (path === "dismiss-group") removeWhere(r => r.app === o.app && !r.ongoing);
         else if (path === "clear") removeWhere(r => !r.ongoing);
     }
-    function quick(cmd) { Quickshell.execDetached([helper, cmd]); }   // mirror | ring | send-clipboard | send-files
+    // Quick actions. Mirror screen and Send files open a window: the panel closes so that window gets the focus. Send clipboard
+    // and Find phone happen in the background: their result shows as a short notice (and a check on the button).
+    signal requestClose()
+    property string notice: ""
+    property bool noticeOk: true
+    property string doneAction: ""
+    function quick(cmd) {
+        if (cmd === "mirror" || cmd === "send-files") { requestClose(); Quickshell.execDetached([helper, cmd]); return; }
+        if (quickProc.running) return;
+        quickProc.cmd = cmd;
+        quickProc.command = [helper, cmd];
+        quickProc.running = true;
+    }
+    Process {
+        id: quickProc
+        property string cmd: ""
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let j = null;
+                try { j = JSON.parse(text); } catch (e) { j = null; }
+                const ok = !!(j && j.ok);
+                root.noticeOk = ok;
+                root.notice = ok ? (quickProc.cmd === "ring" ? "Ringing your phone" : "Clipboard sent to your phone")
+                    : j && j.error === "empty_clipboard" ? "Nothing copied to send"
+                    : "Couldn't reach your phone";
+                root.doneAction = ok ? quickProc.cmd : "";
+                noticeTimer.restart();
+            }
+        }
+    }
+    Timer { id: noticeTimer; interval: 2500; onTriggered: { root.notice = ""; root.doneAction = ""; } }
     function copyCode(code) { post("copy-code", { "code": code }); }
     function startNectarLink() { Quickshell.execDetached([helper, "start"]); retry.interval = 1500; retry.restart(); }
 

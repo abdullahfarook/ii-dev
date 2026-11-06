@@ -41,7 +41,14 @@ case "${1:-}" in
   history) api GET "/v1/notifications/history?q=$(enc "${2:-}")" ;;
   rules) api GET "/v1/notifications/rules" ;;
   devices) api GET "/v1/devices" ;;
-  mirror) api POST "/v1/notifications/mirror" "{}" ;;          # the phone's screen in a NectarLink window
+  mirror) # the phone's screen in a NectarLink window, which then gets the focus
+    before=$(hyprctl clients -j | jq -r '[.[]|select(.class=="nectarlink-desktop")|.address]|join(" ")')
+    api POST "/v1/notifications/mirror" "{}"
+    for _ in $(seq 1 60); do
+      addr=$(hyprctl clients -j | jq -r --arg b " $before " '[.[]|select(.class=="nectarlink-desktop")|.address|select(($b|contains(" "+.+" "))|not)][0] // empty')
+      [ -n "$addr" ] && { hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null; break; }
+      sleep 0.25
+    done ;;
   ring) api POST "/v1/ring" "{}" ;;                              # find my phone
   send-clipboard) # what is copied on this PC goes to the phone
     text=$(wl-paste --no-newline 2>/dev/null) || text=""

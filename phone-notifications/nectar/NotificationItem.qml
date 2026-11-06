@@ -163,38 +163,6 @@ Item {
         onClicked: if (item.canOpenApp && !item.replying) item.openAppRequested()
     }
 
-    // Stacked card visual depth behind collapsed notification groups.
-    Rectangle {
-        visible: item.isGroupLead && !item.groupExpanded && item.groupCount > 2
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 16
-        anchors.rightMargin: 16
-        anchors.bottomMargin: -5
-        height: 10
-        radius: Theme.radiusMd
-        color: Theme.surfaceContainer
-        border.width: 1
-        border.color: Theme.outlineVariant
-        opacity: 0.45
-    }
-    Rectangle {
-        visible: item.isGroupLead && !item.groupExpanded
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
-        anchors.bottomMargin: -2
-        height: 8
-        radius: Theme.radiusMd
-        color: Theme.surfaceContainerHigh
-        border.width: 1
-        border.color: Theme.outlineVariant
-        opacity: 0.65
-    }
-
     // A calm highlighted container for Live Updates.
     Rectangle {
         anchors.fill: parent
@@ -600,17 +568,17 @@ Item {
             id: groupBar
             visible: item.isGroupLead
             width: parent.width
-            spacing: 8
+            spacing: 2
             topPadding: 2
 
             Button {
                 id: toggleGroupBtn
-                variant: "tonal"
+                variant: "text"
                 size: "sm"
                 iconPath: item.groupExpanded ? Icons.chevronUp : Icons.chevronDown
                 text: item.groupExpanded
                       ? qsTr("Show less")
-                      : qsTr("+%1 more").arg(item.groupCount - 1)
+                      : qsTr("Show %1 more").arg(item.groupCount - 1)
                 onClicked: item.list.toggleGroup(item.app)
             }
 
