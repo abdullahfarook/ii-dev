@@ -1,493 +1,394 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
+import qs
+import qs.modules.common
+import qs.modules.common.widgets
 import "nectar"
 
-// The panel content, drawn like NectarLink's Home page Notifications card (same components, colors, spacing): header
-// (History, Clear all), Undo bar, the feed of NotificationItem, and the History / app options / picture Sheets.
-// `store` is the PhoneNotifStore. The Theme comes from NectarLink itself (see nectar/README.md).
+// The panel content in the shell's own style (header with icon and subtitle, icon buttons, search, chips, footer hint; History
+// and App rules are views of the panel with a back button). The notification cards are NectarLink's own NotificationItem /
+// HistoryItem (nectar/), unchanged, each in the app's card color. `store` is the PhoneNotifStore.
 FocusScope {
     id: pn
     required property var store
+    property string mode: "list"           // list | history | rules
+    property string query: ""               // search in the feed
+    property string appFilter: ""           // "" = all apps, else a package name
+    property string rulesApp: ""            // rules view opened from a card's "...": only that app
+    property string rulesAppName: ""
+    property string lightbox: ""
     // handles for the test harness (cage)
     property alias feedList: feedView
-    property alias historyList: historyColumn
-    property alias historySheet: historySheet
-    property alias appSheet: appSheet
-    property alias rulesSheet: rulesSheet
-    property alias previewSheet: imagePreviewSheet
-    property alias historySearch: historySearch
-    property alias clearAllButton: clearAll
-    property alias undoButton: undoBtn
-    property alias historyButton: historyBtn
+    property alias historyList: histView
+    property alias searchInput: searchField.input
+    property alias historySearchInput: histField.input
+
+    readonly property bool filtering: query.trim() !== "" || appFilter !== ""
+    function matches(app, appName, title, text, sub) {
+        if (appFilter !== "" && app !== appFilter) return false
+        const q = query.trim().toLowerCase()
+        return q === "" || [appName, title, text, sub].join(" ").toLowerCase().indexOf(q) >= 0
+    }
+    function openRules(app, name) { rulesApp = app || ""; rulesAppName = name || ""; store.loadRules(); mode = "rules" }
+    function back() { if (lightbox !== "") lightbox = ""; else mode = "list" }
+    onModeChanged: { if (mode === "history") store.loadHistory(""); else if (mode === "rules") store.loadRules() }
+    Component.onCompleted: {
+        if (store.pendingSheet === "rules") { store.pendingSheet = ""; openRules("", "") }
+        keyScope.forceActiveFocus()
+    }
 
     FontLoader { source: "nectar/fonts/Figtree.ttf" }
 
-    Rectangle {  // the card
-        anchors.fill: parent
-        radius: Theme.radiusLg
-        color: Theme.cardColor
-        border.width: Theme.graphite || Theme.hive || Theme.amoled ? 1 : 0
-        border.color: Theme.cardBorder
-    }
-
-    Component.onCompleted: {
-        forceActiveFocus()
-        if (store.pendingSheet === "rules") { store.pendingSheet = ""; openRules() }
-    }
-    function openRules() { store.loadRules(); rulesSheet.open() }
-
-    Column {
-        id: feedColumn
-        anchors { fill: parent; margins: 8 }
-        spacing: 8
-
-        Item {  // header
-            width: parent.width
-            height: Math.max(header.height, clearAll.height, historyBtn.height)
-            Txt {
-                id: header
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.left: parent.left
-                anchors.right: historyBtn.visible ? historyBtn.left : (clearAll.visible ? clearAll.left : parent.right)
-                anchors.rightMargin: 8
-                role: "label"
-                muted: true
-                text: pn.store.count > 0 ? qsTr("Notifications · %1").arg(pn.store.count) : qsTr("Notifications")
-            }
-            IconButton {
-                id: historyBtn
-                anchors.right: clearAll.visible ? clearAll.left : parent.right
-                anchors.rightMargin: clearAll.visible ? 8 : 0
-                anchors.verticalCenter: parent.verticalCenter
-                visible: pn.store.historyEnabled && pn.store.historyCount > 0
-                iconPath: Icons.history
-                text: qsTr("History")
-                label: qsTr("Notification history (last 24 hours)")
-                onClicked: { historySearch.text = ""; pn.store.loadHistory(""); historySheet.open() }
-            }
-            Button {
-                id: clearAll
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                visible: pn.store.count > 0
-                variant: "tonal"
-                size: "sm"
-                iconPath: Icons.close
-                text: qsTr("Clear all")
-                onClicked: pn.store.post("clear")
-            }
+    component IconBtn: RippleButton {
+        id: ib
+        property string symbol
+        property string tip
+        implicitWidth: 30; implicitHeight: 30
+        buttonRadius: Appearance.rounding.full
+        colBackground: "transparent"
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        contentItem: MaterialSymbol {
+            horizontalAlignment: Text.AlignHCenter
+            text: ib.symbol
+            iconSize: Appearance.font.pixelSize.larger
+            color: Appearance.colors.colOnLayer2
+            opacity: ib.enabled ? 1 : 0.4
         }
-
-        // Calm inline Undo bar after dismissing a notification or app group.
-        Rectangle {
-            id: undoBanner
-            width: parent.width
-            height: undoRow.height + 16
-            visible: pn.store.undoLabel.length > 0
-            radius: Theme.radiusMd
-            color: Theme.graphite ? "transparent" : Theme.surfaceContainerHigh
-            border.width: Theme.graphite ? 1 : 0
-            border.color: Theme.outlineVariant
-            Timer {
-                id: undoTimer
-                interval: 6000
-                running: pn.store.undoLabel.length > 0
-                onTriggered: pn.store.post("undo/clear")
-            }
-            Connections {
-                target: pn.store
-                function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) undoTimer.restart() }
-            }
-            Row {
-                id: undoRow
-                x: 12
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 24
-                spacing: 8
-                Txt {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(60, parent.width - undoBtn.width - closeUndoBtn.width - 16)
-                    role: "bodySmall"
-                    elide: Text.ElideRight
-                    text: pn.store.undoLabel
-                }
-                Button {
-                    id: undoBtn
-                    anchors.verticalCenter: parent.verticalCenter
-                    variant: "tonal"
-                    size: "sm"
-                    text: qsTr("Undo")
-                    onClicked: pn.store.post("undo")
-                }
-                IconButton {
-                    id: closeUndoBtn
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconPath: Icons.close
-                    label: qsTr("Dismiss")
-                    onClicked: pn.store.post("undo/clear")
-                }
-            }
+        StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
+    }
+    component Chip: RippleButton {
+        id: chip
+        property string label
+        property bool active: false
+        implicitHeight: 26
+        implicitWidth: chipText.implicitWidth + 20
+        buttonRadius: Appearance.rounding.full
+        colBackground: active ? Appearance.colors.colSecondaryContainer : Appearance.colors.colLayer2
+        colBackgroundHover: active ? Appearance.colors.colSecondaryContainerHover : Appearance.colors.colLayer2Hover
+        contentItem: StyledText {
+            id: chipText
+            horizontalAlignment: Text.AlignHCenter
+            text: chip.label
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: chip.active ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colOnLayer2
         }
-
-        ListView {
-            id: feedView
-            width: parent.width
-            height: parent.height - y
+    }
+    component Field: Rectangle {
+        id: fld
+        property alias input: fieldInput
+        property string placeholder
+        signal edited(string text)
+        Layout.fillWidth: true
+        implicitHeight: 38
+        radius: Appearance.rounding.small
+        color: Appearance.colors.colLayer2
+        border.width: fieldInput.activeFocus ? 1 : 0
+        border.color: Appearance.colors.colPrimary
+        MaterialSymbol { id: fieldIcon; anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter } text: "search"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colSubtext }
+        StyledTextInput {
+            id: fieldInput
+            anchors { left: fieldIcon.right; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 8; rightMargin: 12 }
+            verticalAlignment: TextInput.AlignVCenter
             clip: true
-            spacing: 4
-            model: pn.store.feed
-            boundsBehavior: Flickable.StopAtBounds
-            delegate: NotificationItem {
-                width: feedView.width
-                list: pn.store
-                clock: pn.store.clock
-                canOpenApp: pn.store.canOpenApp && app.length > 0
-                onOpenAppRequested: pn.store.openApp(app, appName.length > 0 ? appName : app)
-                onOptionsRequested: appSheet.openFor(app, appName)
-                onImageClicked: (url) => imagePreviewSheet.openFor(url, title.length > 0 ? title : appName)
-            }
-            add: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.OutCubic } }
-            displaced: Transition { NumberAnimation { properties: "y"; duration: 220; easing.type: Easing.OutCubic } }
-            Txt {  // empty: say why
-                width: parent.width
-                visible: pn.store.count === 0
-                role: "bodySmall"
-                muted: true
-                wrapMode: Text.WordWrap
-                text: !pn.store.connected ? qsTr("NectarLink is not running")
-                    : !pn.store.phoneOnline ? qsTr("Connect %1 to view notifications").arg(pn.store.phoneName.length > 0 ? pn.store.phoneName : qsTr("your phone"))
-                    : qsTr("No notifications")
-            }
-            Button {
-                visible: !pn.store.connected
-                y: 32
-                variant: "tonal"
-                size: "sm"
-                text: qsTr("Start NectarLink")
-                onClicked: pn.store.startNectarLink()
-            }
+            onTextChanged: fld.edited(text)
+            StyledText { visible: fieldInput.text === ""; anchors.verticalCenter: parent.verticalCenter; text: fld.placeholder; color: Appearance.colors.colSubtext }
         }
     }
-
-    // What one app's notifications do on this PC.
-    Sheet {
-        id: appSheet
-        property string app
-        property string appName
-        property string rule: "show"
-        cardWidth: 420
-        function openFor(app, name) {
-            appSheet.app = app
-            appSheet.appName = name
-            appSheet.rule = pn.store.ruleOf(app)
-            open()
+    FocusScope {
+        id: keyScope
+        anchors.fill: parent
+        // Esc: the picture, then a view back to the list, then the search, then (falls through to WidgetBase) the panel
+        Keys.onEscapePressed: event => {
+            if (pn.lightbox !== "") pn.lightbox = ""
+            else if (pn.mode !== "list") pn.mode = "list"
+            else if (pn.query !== "" || pn.appFilter !== "") { searchField.input.text = ""; pn.appFilter = "" }
+            else event.accepted = false
         }
-        Column {
-            width: parent.width
-            spacing: 16
-            Txt { width: parent.width; text: qsTr("%1 notifications").arg(appSheet.appName); role: "headline"; wrapMode: Text.WordWrap }
-            Segmented {
-                options: [
-                    { value: "show", label: qsTr("Show") },
-                    { value: "quiet", label: qsTr("No pop-ups") },
-                    { value: "hidden", label: qsTr("Hide") }
-                ]
-                value: appSheet.rule
-                onPicked: (value) => {
-                    appSheet.rule = value
-                    pn.store.setRule(appSheet.app, value)
+
+        ColumnLayout {
+            anchors { fill: parent; margins: 12 }
+            spacing: 8
+
+            // ---- header ----
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                IconBtn { visible: pn.mode !== "list"; symbol: "arrow_back"; tip: qsTr("Back (Esc)"); onClicked: pn.mode = "list" }
+                Item {  // a tall, narrow phone with the battery ring and percentage in the middle; as tall as the two rows of text
+                    id: phoneGlyph
+                    visible: pn.mode === "list"
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 38
+                    Layout.preferredHeight: 56
+                    readonly property int b: pn.store.battery
+                    Rectangle {  // the body
+                        anchors.fill: parent
+                        radius: 8
+                        color: "transparent"
+                        border.width: 1.5
+                        border.color: Appearance.colors.colOnSecondaryContainer
+                        opacity: pn.store.phoneOnline ? 1 : 0.5
+                        Rectangle { anchors { bottom: parent.bottom; bottomMargin: 3; horizontalCenter: parent.horizontalCenter } width: 12; height: 2; radius: 1; color: Appearance.colors.colOnSecondaryContainer; opacity: 0.8 }
+                    }
+                    CircularProgress {  // the battery level as a ring around the percentage
+                        visible: phoneGlyph.b >= 0
+                        anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: -2 }
+                        implicitSize: 28
+                        lineWidth: 2
+                        value: Math.max(0, Math.min(100, phoneGlyph.b)) / 100
+                        colPrimary: pn.store.charging ? "#43a047" : phoneGlyph.b < 20 ? "#ef5350" : Appearance.colors.colOnSecondaryContainer
+                        colSecondary: Qt.rgba(1, 1, 1, 0.12)
+                        enableAnimation: false
+                        StyledText {
+                            id: pctText
+                            anchors.centerIn: parent
+                            text: phoneGlyph.b
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            color: Appearance.colors.colOnSecondaryContainer
+                        }
+                    }
+                    MaterialSymbol { visible: phoneGlyph.b < 0; anchors.centerIn: parent; text: "smartphone"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnSecondaryContainer }
+                    StyledToolTip { text: phoneGlyph.b >= 0 ? (pn.store.charging ? qsTr("Battery %1%, charging").arg(phoneGlyph.b) : qsTr("Battery %1%").arg(phoneGlyph.b)) : qsTr("Phone"); visible: glyphHover.hovered }
+                    HoverHandler { id: glyphHover }
                 }
-            }
-            Txt {
-                width: parent.width
-                wrapMode: Text.WordWrap
-                role: "body"
-                muted: true
-                text: appSheet.rule === "hidden"
-                      ? qsTr("Hidden on this PC.")
-                      : appSheet.rule === "quiet"
-                        ? qsTr("Shown in feed without pop-ups.")
-                        : qsTr("Shown in feed and as desktop pop-ups.")
-            }
-            Row {
-                anchors.right: parent.right
-                Button { text: qsTr("Done"); onClicked: appSheet.close() }
-            }
-        }
-    }
-
-    // Every app's rule (Settings > Notifications in NectarLink).
-    Sheet {
-        id: rulesSheet
-        cardWidth: 420
-        Column {
-            width: parent.width
-            spacing: 12
-            Txt { width: parent.width; text: qsTr("Notifications"); role: "headline" }
-            Txt {
-                width: parent.width
-                wrapMode: Text.WordWrap
-                role: "bodySmall"
-                muted: true
-                text: qsTr("What each app's notifications do on this PC.")
-            }
-            Flickable {
-                width: parent.width
-                height: Math.min(rulesColumn.height, pn.height - 310)
-                contentHeight: rulesColumn.height
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                Column {
-                    id: rulesColumn
-                    width: parent.width
-                    spacing: 6
-                    Repeater {
-                        model: rulesSheet.opened ? pn.store.rulesApps : []
-                        delegate: Item {
-                            id: ruleRow
-                            required property var modelData
-                            width: rulesColumn.width
-                            height: 44
-                            Avatar {
-                                id: ruleIcon
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 28; height: 28
-                                name: ruleRow.modelData.name
-                                visible: ruleImg.status !== Image.Ready
-                            }
-                            Image {
-                                id: ruleImg
-                                anchors.fill: ruleIcon
-                                source: ruleRow.modelData.icon
-                                sourceSize: Qt.size(56, 56)
-                                smooth: true
-                                visible: status === Image.Ready
-                            }
-                            Txt {
-                                anchors.left: ruleIcon.right
-                                anchors.leftMargin: 10
-                                anchors.right: ruleSeg.left
-                                anchors.rightMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: ruleRow.modelData.name
-                                role: "body"
-                            }
-                            Segmented {
-                                id: ruleSeg
-                                anchors.right: parent.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                options: [
-                                    { value: "show", label: qsTr("Show") },
-                                    { value: "quiet", label: qsTr("Quiet") },
-                                    { value: "hidden", label: qsTr("Hide") }
-                                ]
-                                value: ruleRow.modelData.rule
-                                onPicked: (value) => pn.store.setRule(ruleRow.modelData.app, value)
-                            }
+                ColumnLayout {
+                    id: headerText
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 3
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: pn.mode === "history" ? qsTr("Notification history")
+                            : pn.mode === "rules" ? (pn.rulesApp !== "" ? qsTr("%1 notifications").arg(pn.rulesAppName) : qsTr("App rules"))
+                            : pn.store.phoneName !== "" ? pn.store.phoneName : qsTr("Phone notifications")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
+                        color: Appearance.colors.colOnLayer2
+                    }
+                    StyledText {
+                        visible: pn.mode !== "list"
+                        Layout.fillWidth: true
+                        text: pn.mode === "history" ? (pn.store.historyTotal > 0 ? qsTr("Dismissed in the last 24 hours") : qsTr("No recent notifications"))
+                            : pn.mode === "rules" ? qsTr("What each app's notifications do on this PC")
+                            : ""
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
+                        elide: Text.ElideRight
+                    }
+                    RowLayout {  // under the name: connection, link, battery, then the count (like a system tray)
+                        visible: pn.mode === "list"
+                        Layout.fillWidth: true
+                        spacing: 8
+                        MaterialSymbol {
+                            visible: pn.store.connected
+                            text: pn.store.phoneOnline ? "check_circle" : "link_off"
+                            fill: 1
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: pn.store.phoneOnline ? "#43a047" : Appearance.colors.colSubtext
+                            StyledToolTip { text: pn.store.phoneOnline ? qsTr("%1 is connected").arg(pn.store.phoneName) : qsTr("%1 is offline").arg(pn.store.phoneName); visible: linkHover.hovered }
+                            HoverHandler { id: linkHover }
+                        }
+                        MaterialSymbol {
+                            visible: pn.store.phoneOnline && pn.store.link !== ""
+                            text: pn.store.link === "usb" ? "usb" : pn.store.link === "relay" ? "cloud" : "wifi"
+                            iconSize: Appearance.font.pixelSize.larger
+                            color: Appearance.colors.colOnLayer2
+                            StyledToolTip { text: pn.store.link === "usb" ? qsTr("Linked over USB") : pn.store.link === "relay" ? qsTr("Linked over the internet (relay)") : qsTr("Linked over Wi-Fi"); visible: netHover.hovered }
+                            HoverHandler { id: netHover }
+                        }
+                        StyledText {
+                            Layout.fillWidth: true
+                            text: !pn.store.connected ? qsTr("NectarLink is not running")
+                                : pn.store.count > 0 ? pn.store.count + (pn.store.count === 1 ? " notification" : " notifications") : qsTr("No notifications")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
                         }
                     }
                 }
+                IconBtn { visible: pn.mode === "list" && pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
+                IconBtn { visible: pn.mode === "list" && pn.store.connected; symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
+                IconBtn { visible: pn.mode === "list"; symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
+                IconBtn { id: clearAllBtn; visible: pn.mode === "list" && pn.store.count > 0; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
+                IconBtn { id: clearHistBtn; visible: pn.mode === "history" && pn.store.historyTotal > 0; symbol: "delete"; tip: qsTr("Clear history"); onClicked: pn.store.post("history/clear") }
             }
-            Row {
-                anchors.right: parent.right
-                Button { text: qsTr("Done"); onClicked: rulesSheet.close() }
-            }
-        }
-    }
 
-    // Notifications from the last day that are gone from the phone.
-    Sheet {
-        id: historySheet
-        cardWidth: 560
-        Column {
-            width: parent.width
-            spacing: 12
-            Item {
-                width: parent.width
-                height: Math.max(historyTitle.height, clearHistory.height)
-                Txt { id: historyTitle; anchors.verticalCenter: parent.verticalCenter; text: qsTr("Notification history"); role: "headline" }
-                Button {
-                    id: clearHistory
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: pn.store.history.count > 0
-                    variant: "text"
-                    size: "sm"
-                    text: qsTr("Clear history")
-                    onClicked: pn.store.post("history/clear")
+            // ---- list: search, app chips, the feed ----
+            Field {
+                id: searchField
+                visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
+                placeholder: qsTr("Filter by app, title or text…")
+                onEdited: text => pn.query = text
+            }
+            Flow {
+                visible: pn.mode === "list" && pn.store.appList.length > 1
+                Layout.fillWidth: true
+                spacing: 4
+                Chip { label: qsTr("All"); active: pn.appFilter === ""; onClicked: pn.appFilter = "" }
+                Repeater {
+                    model: pn.store.appList
+                    delegate: Chip {
+                        required property var modelData
+                        label: modelData.name + " · " + modelData.count
+                        active: pn.appFilter === modelData.app
+                        onClicked: pn.appFilter = pn.appFilter === modelData.app ? "" : modelData.app
+                    }
                 }
             }
-            Txt {
-                width: parent.width
-                wrapMode: Text.WordWrap
-                role: "bodySmall"
-                muted: true
-                text: pn.store.historyTotal > 0
-                      ? qsTr("Dismissed notifications from the last 24 hours.")
-                      : qsTr("No recent notifications.")
-            }
-            // Search: by app, title or text, ignoring case.
+            // Undo after a dismiss or Clear all
             Rectangle {
-                width: parent.width
-                height: 40
-                visible: pn.store.historyTotal > 0
-                radius: Theme.graphite ? Theme.radiusSm : height / 2
-                color: Theme.graphite ? "transparent" : Theme.surfaceContainerHighest
-                border.width: historySearch.activeFocus ? 2 : 1
-                border.color: historySearch.activeFocus ? Theme.primary : Theme.outlineVariant
-                Icon {
-                    id: searchIcon
-                    anchors.left: parent.left
-                    anchors.leftMargin: 14
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 18; height: 18
-                    path: Icons.search
-                    color: Theme.surfaceContentVariant
+                id: undoBar
+                visible: pn.mode === "list" && pn.store.undoLabel.length > 0
+                Layout.fillWidth: true
+                implicitHeight: 38; radius: Appearance.rounding.small
+                color: Appearance.colors.colSecondaryContainer
+                Timer { id: undoTimer; interval: 6000; running: undoBar.visible; onTriggered: pn.store.post("undo/clear") }
+                Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) undoTimer.restart() } }
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 12; rightMargin: 4 }
+                    StyledText { Layout.fillWidth: true; text: pn.store.undoLabel; elide: Text.ElideRight; color: Appearance.colors.colOnSecondaryContainer }
+                    Chip { id: undoBtn; label: qsTr("Undo"); active: true; onClicked: pn.store.post("undo") }
+                    IconBtn { symbol: "close"; tip: qsTr("Dismiss"); onClicked: pn.store.post("undo/clear") }
                 }
-                TextInput {
-                    id: historySearch
-                    anchors.left: searchIcon.right
-                    anchors.leftMargin: 10
-                    anchors.right: parent.right
-                    anchors.rightMargin: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    font.family: Theme.fontUi
-                    font.pixelSize: 14
-                    color: Theme.surfaceContent
-                    selectionColor: Theme.primaryContainer
-                    selectedTextColor: Theme.primaryContainerContent
-                    clip: true
-                    onTextChanged: historyDebounce.restart()
-                    Keys.onEscapePressed: (event) => {
-                        // Clears first; a second Escape closes the sheet.
-                        event.accepted = text.length > 0
-                        text = ""
-                    }
-                    Accessible.name: qsTr("Search notification history")
-                    Txt {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: historySearch.text.length === 0
-                        role: "body"
-                        muted: true
-                        text: qsTr("Search notification history")
-                    }
-                }
-                Timer { id: historyDebounce; interval: 200; onTriggered: pn.store.loadHistory(historySearch.text.trim()) }
             }
-            Flickable {
-                width: parent.width
-                height: Math.min(historyColumn.height, pn.height - 310)
-                contentHeight: historyColumn.height
+            StyledListView {
+                id: feedView
+                visible: pn.mode === "list"
+                animateAppearance: false
+                Layout.fillWidth: true
+                Layout.fillHeight: true
                 clip: true
+                spacing: 0
+                model: pn.store.feed
                 boundsBehavior: Flickable.StopAtBounds
-                Column {
-                    id: historyColumn
-                    width: parent.width
-                    Repeater {
-                        model: historySheet.opened ? pn.store.history : null
-                        delegate: HistoryItem {
-                            required property string deviceId
-                            required property string app
-                            width: historyColumn.width
-                            canOpenApp: pn.store.canOpenApp && app.length > 0
-                            onOpenAppRequested: {
-                                historySheet.close()
-                                pn.store.openApp(app, appName.length > 0 ? appName : app)
+                // the app's own NotificationItem is the delegate (its roles are filled from the model), on the panel's own background
+                delegate: NotificationItem {
+                    id: ni
+                    readonly property bool shown: pn.matches(app, appName, title, text, sub)
+                    width: feedView.width
+                    visible: shown
+                    height: shown ? implicitHeight + 4 : 0
+                    list: pn.store
+                    clock: pn.store.clock
+                    canOpenApp: pn.store.canOpenApp && app.length > 0
+                    onOpenAppRequested: pn.store.openApp(app, appName.length > 0 ? appName : app)
+                    onOptionsRequested: pn.openRules(app, appName)
+                    onImageClicked: url => pn.lightbox = url
+                }
+            }
+            // empty states
+            Item {
+                visible: pn.mode === "list" && (feedView.count === 0 || (pn.filtering && feedView.contentHeight < 1))
+                Layout.fillWidth: true; Layout.fillHeight: true
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+                    MaterialSymbol { Layout.alignment: Qt.AlignHCenter; text: !pn.store.connected ? "phonelink_off" : "notifications_off"; iconSize: 44; color: Appearance.colors.colSubtext }
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: !pn.store.connected ? qsTr("NectarLink is not running")
+                            : !pn.store.phoneOnline ? qsTr("Connect your phone to see notifications")
+                            : pn.filtering && feedView.count > 0 ? qsTr("Nothing matches")
+                            : qsTr("No notifications")
+                        color: Appearance.colors.colSubtext
+                    }
+                    Chip { visible: !pn.store.connected; Layout.alignment: Qt.AlignHCenter; label: qsTr("Start NectarLink"); active: true; onClicked: pn.store.startNectarLink() }
+                }
+            }
+
+            // ---- history ----
+            Field {
+                id: histField
+                visible: pn.mode === "history" && pn.store.historyTotal > 0
+                placeholder: qsTr("Search notification history")
+                onEdited: text => histDebounce.restart()
+                Timer { id: histDebounce; interval: 200; onTriggered: pn.store.loadHistory(histField.input.text.trim()) }
+            }
+            StyledListView {
+                id: histView
+                visible: pn.mode === "history"
+                animateAppearance: false
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 0
+                model: pn.store.history
+                boundsBehavior: Flickable.StopAtBounds
+                delegate: HistoryItem {
+                    id: hi
+                    required property string deviceId
+                    required property string app
+                    width: histView.width
+                    height: implicitHeight + 4
+                    canOpenApp: pn.store.canOpenApp && app.length > 0
+                    onOpenAppRequested: pn.store.openApp(app, appName.length > 0 ? appName : app)
+                }
+            }
+
+            // ---- app rules ----
+            StyledListView {
+                id: rulesView
+                visible: pn.mode === "rules"
+                animateAppearance: false
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                boundsBehavior: Flickable.StopAtBounds
+                model: pn.rulesApp !== "" ? pn.store.rulesApps.filter(a => a.app === pn.rulesApp) : pn.store.rulesApps
+                delegate: Rectangle {
+                    id: ruleRow
+                    required property var modelData
+                    width: rulesView.width
+                    implicitHeight: 48
+                    radius: Appearance.rounding.small
+                    color: Appearance.colors.colLayer2
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 10; rightMargin: 8 }
+                        spacing: 8
+                        Item {
+                            implicitWidth: 28; implicitHeight: 28
+                            Image { id: ric; anchors.fill: parent; source: ruleRow.modelData.icon; sourceSize: Qt.size(56, 56); asynchronous: true; visible: status === Image.Ready }
+                            Avatar { anchors.fill: parent; name: ruleRow.modelData.name; visible: ric.status !== Image.Ready }
+                        }
+                        StyledText { Layout.fillWidth: true; text: ruleRow.modelData.name; elide: Text.ElideRight; color: Appearance.colors.colOnLayer2 }
+                        Repeater {
+                            model: [{ "k": "show", "t": qsTr("Show") }, { "k": "quiet", "t": qsTr("No pop-ups") }, { "k": "hidden", "t": qsTr("Hide") }]
+                            delegate: Chip {
+                                required property var modelData
+                                label: modelData.t
+                                active: ruleRow.modelData.rule === modelData.k
+                                onClicked: pn.store.setRule(ruleRow.modelData.app, modelData.k)
                             }
                         }
                     }
                 }
             }
-            Txt {
-                width: parent.width
-                visible: historySearch.text.trim().length > 0 && historyColumn.height === 0
+
+            // ---- footer hint ----
+            StyledText {
+                Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
-                role: "body"
-                muted: true
-                text: qsTr("Nothing matches “%1”.").arg(historySearch.text.trim())
-            }
-            Row {
-                anchors.right: parent.right
-                Button { text: qsTr("Done"); onClicked: historySheet.close() }
+                wrapMode: Text.Wrap
+                text: pn.mode === "list" ? qsTr("Reply, act and dismiss right here · Esc closes")
+                    : pn.mode === "history" ? qsTr("Esc goes back")
+                    : qsTr("Esc goes back")
+                font.pixelSize: Appearance.font.pixelSize.smallest
+                color: Appearance.colors.colSubtext
             }
         }
-    }
 
-    // Inline lightbox preview for notification images.
-    Sheet {
-        id: imagePreviewSheet
-        property string imageUrl: ""
-        property string caption: ""
-        cardWidth: 680
-        function openFor(url, title) {
-            imageUrl = url || ""
-            caption = title || ""
-            if (imageUrl.length > 0)
-                open()
+        // ---- picture preview (click or Esc closes) ----
+        Rectangle {
+            visible: pn.lightbox !== ""
+            anchors.fill: parent
+            color: "#cc000000"
+            radius: Appearance.rounding.normal
+            MouseArea { anchors.fill: parent; onClicked: pn.lightbox = "" }
+            Image { anchors { fill: parent; margins: 16 } source: pn.lightbox; fillMode: Image.PreserveAspectFit; asynchronous: true; smooth: true; mipmap: true }
         }
-        Column {
-            width: parent.width
-            spacing: 14
-            Item {
-                width: parent.width
-                height: Math.max(previewHeaderTxt.height, closePreviewBtn.height)
-                Txt {
-                    id: previewHeaderTxt
-                    anchors.left: parent.left
-                    anchors.right: closePreviewBtn.left
-                    anchors.rightMargin: 12
-                    anchors.verticalCenter: parent.verticalCenter
-                    role: "headline"
-                    elide: Text.ElideRight
-                    text: imagePreviewSheet.caption.length > 0 ? imagePreviewSheet.caption : qsTr("Image preview")
-                }
-                IconButton {
-                    id: closePreviewBtn
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    iconPath: Icons.close
-                    label: qsTr("Close")
-                    onClicked: imagePreviewSheet.close()
-                }
-            }
-            Rectangle {
-                width: parent.width
-                height: Math.min(480, Math.max(200, previewImg.status === Image.Ready
-                    ? width * previewImg.implicitHeight / Math.max(1, previewImg.implicitWidth)
-                    : 320))
-                radius: Theme.radiusMd
-                color: Theme.surfaceContainerHighest
-                clip: true
-                Image {
-                    id: previewImg
-                    anchors.fill: parent
-                    anchors.margins: 8
-                    source: imagePreviewSheet.imageUrl
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    mipmap: true
-                }
-            }
-            Row {
-                anchors.right: parent.right
-                spacing: 8
-                Button {
-                    variant: "tonal"
-                    iconPath: Icons.photo
-                    text: qsTr("Open externally")
-                    onClicked: Qt.openUrlExternally(imagePreviewSheet.imageUrl)
-                }
-                Button { text: qsTr("Done"); onClicked: imagePreviewSheet.close() }
-            }
-        }
-    }
-
-    // Esc closes the open sheet first; with none open it falls through to WidgetBase (closes the panel).
-    Keys.onEscapePressed: (event) => {
-        if (historySheet.opened) historySheet.close()
-        else if (appSheet.opened) appSheet.close()
-        else if (rulesSheet.opened) rulesSheet.close()
-        else if (imagePreviewSheet.opened) imagePreviewSheet.close()
-        else event.accepted = false
     }
 }

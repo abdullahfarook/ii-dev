@@ -22,6 +22,7 @@ Item {
     property string phoneName: ""
     property int battery: -1
     property bool charging: false
+    property string link: ""           // lan | usb | relay | connecting | offline
     property int count: 0
     property string undoLabel: ""
     property bool historyEnabled: true
@@ -30,6 +31,7 @@ Item {
     property var online: ({})
     property var rulesApps: []
     property int historyTotal: 0
+    property var appList: []            // [{ app, name, count }] of the notifications now in the feed (the filter chips)
     property int historyCount: 0        // dismissed notifications kept (shows the History button)
     property string pendingSheet: ""   // set by the right-click menu: a Sheet the panel opens when it shows ("rules")
     property bool canOpenApp: false     // click a card to open the phone app in a window on this PC (NectarLink's app windows)
@@ -99,6 +101,12 @@ Item {
         online = j.online || ({});
         phoneOnline = Object.values(online).some(v => v);
         syncModel(feedModel, j.items.map(flat), r => r.uid);
+        const seen = {}, list = [];
+        for (const it of j.items) {
+            if (!seen[it.app]) { seen[it.app] = { "app": it.app, "name": it.appName, "count": 0 }; list.push(seen[it.app]); }
+            if (it.groupIndex === 0) seen[it.app].count += it.groupCount;
+        }
+        appList = list;
     }
     function setOffline() {
         connected = false; phoneOnline = false; count = 0; undoLabel = ""; rev = 0;
@@ -162,6 +170,7 @@ Item {
                         root.phoneName = d.name;
                         root.battery = d.battery ? d.battery.level : -1;
                         root.charging = d.battery ? d.battery.charging : false;
+                        root.link = d.link || "";
                     }
                 } catch (e) {}
             }
