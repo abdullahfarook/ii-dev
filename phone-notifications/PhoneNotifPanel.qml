@@ -51,24 +51,6 @@ FocusScope {
         }
         StyledToolTip { text: ib.tip; visible: ib.hovered && ib.tip !== "" }
     }
-    component StatusBtn: RippleButton {  // a quick action drawn like the status icons next to it: plain icon, no background
-        id: sb
-        property string symbol
-        property string tip
-        implicitWidth: 26; implicitHeight: 26
-        buttonRadius: Appearance.rounding.full
-        colBackground: "transparent"
-        colBackgroundHover: Appearance.colors.colLayer2Hover
-        enabled: pn.store.phoneOnline
-        contentItem: MaterialSymbol {
-            horizontalAlignment: Text.AlignHCenter
-            text: sb.symbol
-            iconSize: Appearance.font.pixelSize.larger
-            color: Appearance.colors.colOnLayer2
-            opacity: sb.enabled ? 1 : 0.4
-        }
-        StyledToolTip { text: sb.tip; visible: sb.hovered }
-    }
     component Chip: RippleButton {
         id: chip
         property string label
@@ -190,52 +172,67 @@ FocusScope {
                         color: Appearance.colors.colSubtext
                         elide: Text.ElideRight
                     }
-                    RowLayout {  // under the name: connection, link, battery, then the count (like a system tray)
+                    RowLayout {  // under the name: status only (connection and link), small and quiet like a subtitle
                         visible: pn.mode === "list"
                         Layout.fillWidth: true
-                        spacing: 8
+                        spacing: 4
                         MaterialSymbol {
                             visible: pn.store.connected
                             text: pn.store.phoneOnline ? "check_circle" : "link_off"
                             fill: 1
-                            iconSize: Appearance.font.pixelSize.larger
+                            iconSize: Appearance.font.pixelSize.normal
                             color: pn.store.phoneOnline ? "#43a047" : Appearance.colors.colSubtext
-                            StyledToolTip { text: pn.store.phoneOnline ? qsTr("%1 is connected").arg(pn.store.phoneName) : qsTr("%1 is offline").arg(pn.store.phoneName); visible: linkHover.hovered }
-                            HoverHandler { id: linkHover }
                         }
+                        StyledText {
+                            text: !pn.store.connected ? qsTr("NectarLink is not running") : pn.store.phoneOnline ? qsTr("Connected") : qsTr("Offline")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                        }
+                        StyledText { visible: linkIcon.visible; text: "·"; font.pixelSize: Appearance.font.pixelSize.smaller; color: Appearance.colors.colSubtext }
                         MaterialSymbol {
+                            id: linkIcon
                             visible: pn.store.phoneOnline && pn.store.link !== ""
                             text: pn.store.link === "usb" ? "usb" : pn.store.link === "relay" ? "cloud" : "wifi"
-                            iconSize: Appearance.font.pixelSize.larger
-                            color: Appearance.colors.colOnLayer2
-                            StyledToolTip { text: pn.store.link === "usb" ? qsTr("Linked over USB") : pn.store.link === "relay" ? qsTr("Linked over the internet (relay)") : qsTr("Linked over Wi-Fi"); visible: netHover.hovered }
-                            HoverHandler { id: netHover }
+                            iconSize: Appearance.font.pixelSize.normal
+                            color: Appearance.colors.colSubtext
                         }
-                        StatusBtn { visible: pn.store.connected; symbol: "screen_share"; tip: qsTr("Mirror screen"); onClicked: pn.store.quick("mirror") }
-                        StatusBtn { visible: pn.store.connected; symbol: "send"; tip: qsTr("Send files"); onClicked: pn.store.quick("send-files") }
-                        StatusBtn { visible: pn.store.connected; symbol: "content_paste_go"; tip: qsTr("Send clipboard"); onClicked: pn.store.quick("send-clipboard") }
-                        StatusBtn { visible: pn.store.connected; symbol: "notifications_active"; tip: qsTr("Find phone"); onClicked: pn.store.quick("ring") }
-                        Item { Layout.fillWidth: true }
+                        StyledText {
+                            visible: linkIcon.visible
+                            Layout.fillWidth: true
+                            text: pn.store.link === "usb" ? qsTr("USB") : pn.store.link === "relay" ? qsTr("Relay") : qsTr("Wi-Fi")
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colSubtext
+                            elide: Text.ElideRight
+                        }
+                        Item { visible: !linkIcon.visible; Layout.fillWidth: true }
                     }
                 }
                 IconBtn { id: clearHistBtn; visible: pn.mode === "history" && pn.store.historyTotal > 0; symbol: "delete"; tip: qsTr("Clear history"); onClicked: pn.store.post("history/clear") }
             }
 
             // ---- list: search, app chips, the feed ----
-            // ---- panel actions: History, App rules, Open NectarLink, Clear all ----
+            // ---- toolbar: what to do with the phone (left), the panel's own views (right) ----
             RowLayout {
                 visible: pn.mode === "list" && pn.store.connected
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: 2
+                IconBtn { symbol: "screen_share"; tip: qsTr("Mirror screen"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("mirror") }
+                IconBtn { symbol: "send"; tip: qsTr("Send files"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("send-files") }
+                IconBtn { symbol: "content_paste_go"; tip: qsTr("Send clipboard"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("send-clipboard") }
+                IconBtn { symbol: "notifications_active"; tip: qsTr("Find phone"); enabled: pn.store.phoneOnline; onClicked: pn.store.quick("ring") }
                 Item { Layout.fillWidth: true }
-                IconBtn { visible: pn.mode === "list" && pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
-                IconBtn { visible: pn.mode === "list" && pn.store.connected; symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
-                IconBtn { visible: pn.mode === "list"; symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
-                IconBtn { id: clearAllBtn; visible: pn.mode === "list" && pn.store.count > 0; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
+                IconBtn { visible: pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
+                IconBtn { symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
+                IconBtn { symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
             }
-            Flow {
+            Rectangle { visible: pn.mode === "list" && pn.store.connected; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border; opacity: 0.6 }
+            RowLayout {
                 visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
                 Layout.fillWidth: true
+                spacing: 4
+            Flow {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
                 spacing: 4
                 Chip { label: qsTr("All") + " · " + pn.store.count; active: pn.appFilter === ""; onClicked: pn.appFilter = "" }
                 Repeater {
@@ -247,6 +244,8 @@ FocusScope {
                         onClicked: pn.appFilter = pn.appFilter === modelData.app ? "" : modelData.app
                     }
                 }
+            }
+                IconBtn { id: clearAllBtn; Layout.alignment: Qt.AlignTop; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
             }
             // Undo after a dismiss or Clear all
             Rectangle {
