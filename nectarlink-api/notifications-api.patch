@@ -1,0 +1,891 @@
+diff --git a/desktop/app/src/bridge/notifications.rs b/desktop/app/src/bridge/notifications.rs
+index 40818fe..7ad432c 100644
+--- a/desktop/app/src/bridge/notifications.rs
++++ b/desktop/app/src/bridge/notifications.rs
+@@ -2,7 +2,6 @@
+ //! `NotificationList`: phone notifications (newest first) as a Qt list
+ //! model, plus the commands QML runs on them.
+ 
+-use crate::i18n::tr;
+ use std::pin::Pin;
+ 
+ use cxx_qt::{CxxQtType, Threading};
+@@ -159,23 +158,23 @@ pub mod qobject {
+ 
+ /// A row: the notification plus what the UI needs to show it.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+-struct Row {
+-    view: NotificationView,
+-    device_name: String,
++pub(crate) struct Row {
++    pub(crate) view: NotificationView,
++    pub(crate) device_name: String,
+     /// A file URL, or "" (the UI then shows the app's initial).
+-    icon_url: String,
++    pub(crate) icon_url: String,
+     /// The notification's picture as a file URL, or "".
+-    image_url: String,
++    pub(crate) image_url: String,
+     /// Replies sent from this PC.
+-    replies: Vec<SentReply>,
++    pub(crate) replies: Vec<SentReply>,
+     /// Total notifications in this `(device, app)` group (`1` if ungrouped or live).
+-    group_count: i32,
++    pub(crate) group_count: i32,
+     /// Index within the `(device, app)` group (`0` is the newest / lead item).
+-    group_index: i32,
++    pub(crate) group_index: i32,
+     /// Whether this `(device, app)` group is currently expanded.
+-    group_expanded: bool,
++    pub(crate) group_expanded: bool,
+     /// Short preview of older notifications in the group when collapsed.
+-    group_summary: String,
++    pub(crate) group_summary: String,
+ }
+ 
+ #[derive(Default)]
+@@ -288,7 +287,7 @@ fn role_value(row: &Row, role: &str) -> QVariant {
+     }
+ }
+ 
+-fn rule_name(rule: AppRule) -> &'static str {
++pub(crate) fn rule_name(rule: AppRule) -> &'static str {
+     match rule {
+         AppRule::Show => "show",
+         AppRule::Quiet => "quiet",
+@@ -297,7 +296,7 @@ fn rule_name(rule: AppRule) -> &'static str {
+ }
+ 
+ /// The apps list for Settings (see the `apps` property).
+-fn apps_json(s: &AppState) -> String {
++pub(crate) fn apps_json(s: &AppState) -> String {
+     let mut apps: Vec<(&String, &String)> = s.app_names.iter().collect();
+     apps.sort_by_key(|(app, name)| (name.to_lowercase(), (*app).clone()));
+     serde_json::Value::from(
+@@ -343,7 +342,7 @@ fn make_row(
+ /// Builds display rows from [`AppState`], keeping Live Updates ungrouped at the top
+ /// and grouping regular notifications by `(device, app)` in order of each app's
+ /// newest notification. Collapsed groups emit only their lead item (`group_index == 0`).
+-fn build_rows(s: &AppState) -> Vec<Row> {
++pub(crate) fn build_rows(s: &AppState) -> Vec<Row> {
+     let visible: Vec<&NotificationView> =
+         s.notifications.iter().filter(|view| s.app_rule(&view.notification.app) != AppRule::Hidden).collect();
+     let mut rows = Vec::with_capacity(visible.len());
+@@ -483,84 +482,15 @@ impl qobject::NotificationList {
+     }
+ 
+     pub fn dismiss(&self, device: &QString, key: &QString) {
+-        let dev_str = String::from(device);
+-        let key_str = String::from(key);
+-        if let Ok(dev_id) = dev_str.parse::<DeviceId>() {
+-            let found = core_host::host().hub.read(|s| {
+-                s.notifications.iter().find(|n| n.device == dev_id && n.notification.key == key_str).cloned()
+-            });
+-            // The phone won't dismiss these, so it would only come back.
+-            if found.as_ref().is_some_and(|v| v.notification.ongoing) {
+-                return;
+-            }
+-            if let Some(view) = found {
+-                let label = if view.notification.app_name.is_empty() {
+-                    tr!("Notifications", "Notification dismissed")
+-                } else {
+-                    tr!("Notifications", "Dismissed from %1", view.notification.app_name)
+-                };
+-                core_host::host().hub.update(|s| s.record_dismissed(vec![view], label));
+-            }
+-        }
+-        crate::notifications::dismiss(&dev_str, key_str);
++        crate::notifications::dismiss_with_undo(&String::from(device), String::from(key));
+     }
+ 
+     pub fn dismiss_group(&self, device: &QString, app: &QString) {
+-        let dev_str = String::from(device);
+-        let app_str = String::from(app);
+-        let Ok(dev_id) = dev_str.parse::<DeviceId>() else { return };
+-        let views: Vec<NotificationView> = core_host::host().hub.read(|s| {
+-            s.notifications
+-                .iter()
+-                .filter(|n| n.device == dev_id && n.notification.app == app_str && !n.notification.ongoing)
+-                .cloned()
+-                .collect()
+-        });
+-        if views.is_empty() {
+-            return;
+-        }
+-        let app_name = views[0].notification.app_name.clone();
+-        let count = views.len();
+-        let label = if count == 1 {
+-            tr!("Notifications", "Dismissed from %1", app_name)
+-        } else {
+-            tr!("Notifications", "Dismissed %1 from %2", count, app_name)
+-        };
+-        let keys: Vec<String> = views.iter().map(|v| v.notification.key.clone()).collect();
+-        core_host::host().hub.update(|s| s.record_dismissed(views, label));
+-        for key in keys {
+-            crate::notifications::dismiss(&dev_str, key);
+-        }
++        crate::notifications::dismiss_app_group(&String::from(device), &String::from(app));
+     }
+ 
+     pub fn dismiss_all(&self, device: &QString) {
+-        let dev_str = String::from(device);
+-        let Ok(dev_id) = dev_str.parse::<DeviceId>() else { return };
+-        let views: Vec<NotificationView> = core_host::host().hub.read(|s| {
+-            s.notifications
+-                .iter()
+-                .filter(|n| {
+-                    n.device == dev_id
+-                        && !n.notification.ongoing
+-                        && s.app_rule(&n.notification.app) != AppRule::Hidden
+-                })
+-                .cloned()
+-                .collect()
+-        });
+-        if views.is_empty() {
+-            return;
+-        }
+-        let count = views.len();
+-        let label = if count == 1 {
+-            tr!("Notifications", "Notification dismissed")
+-        } else {
+-            tr!("Notifications", "Dismissed %1 notifications", count)
+-        };
+-        let keys: Vec<String> = views.iter().map(|v| v.notification.key.clone()).collect();
+-        core_host::host().hub.update(|s| s.record_dismissed(views, label));
+-        for key in keys {
+-            crate::notifications::dismiss(&dev_str, key);
+-        }
++        crate::notifications::dismiss_all_for(&String::from(device));
+     }
+ 
+     pub fn toggle_group(&self, app: &QString) {
+diff --git a/desktop/app/src/local_api.rs b/desktop/app/src/local_api.rs
+index 90c987c..fafb427 100644
+--- a/desktop/app/src/local_api.rs
++++ b/desktop/app/src/local_api.rs
+@@ -45,6 +45,8 @@ pub const TOKEN_FILE_NAME: &str = "api-token.json";
+ 
+ const MAX_REQUEST_BYTES: usize = 256 * 1024;
+ const IO_TIMEOUT: Duration = Duration::from_secs(5);
++/// A whole request, including a feed request that waits for news (at most 55 s).
++const CONNECTION_TIMEOUT: Duration = Duration::from_secs(65);
+ 
+ /// Contents of `<data_dir>/api-token.json`.
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+@@ -241,7 +243,7 @@ pub async fn start_on_port(port: u16, token: String) -> std::io::Result<(SocketA
+                     let expected_token = token.clone();
+                     tokio::spawn(async move {
+                         let _ = tokio::time::timeout(
+-                            IO_TIMEOUT,
++                            CONNECTION_TIMEOUT,
+                             handle_connection(stream, &expected_token),
+                         )
+                         .await;
+@@ -389,7 +391,11 @@ async fn write_json_response(
+ }
+ 
+ async fn handle_connection(mut stream: TcpStream, expected_token: &str) -> std::io::Result<()> {
+-    let Some(req) = read_http_request(&mut stream).await? else {
++    // Reading the request stays under the short timeout; only answering may take long (a feed waiting for news).
++    let Ok(read) = tokio::time::timeout(IO_TIMEOUT, read_http_request(&mut stream)).await else {
++        return Ok(());
++    };
++    let Some(req) = read? else {
+         return Ok(());
+     };
+ 
+@@ -506,6 +512,11 @@ fn resolve_target_device(requested: Option<&str>) -> Option<DeviceId> {
+ }
+ 
+ async fn route_request(req: HttpRequest) -> (u16, &'static str, Value) {
++    if let Some(reply) =
++        crate::notifications_api::route(req.method.as_str(), req.path.as_str(), &req.query, &req.body).await
++    {
++        return reply;
++    }
+     match (req.method.as_str(), req.path.as_str()) {
+         ("GET", "/v1/devices") => handle_get_devices(),
+         ("POST", "/v1/send") => handle_post_send(&req.body).await,
+diff --git a/desktop/app/src/main.rs b/desktop/app/src/main.rs
+index 3b389b4..8754430 100644
+--- a/desktop/app/src/main.rs
++++ b/desktop/app/src/main.rs
+@@ -35,6 +35,7 @@ mod messages;
+ mod mirror;
+ mod notification_store;
+ mod notifications;
++mod notifications_api;
+ mod obs;
+ mod palette;
+ mod pc_audio_stream;
+diff --git a/desktop/app/src/notifications.rs b/desktop/app/src/notifications.rs
+index 94cb914..f6b0c48 100644
+--- a/desktop/app/src/notifications.rs
++++ b/desktop/app/src/notifications.rs
+@@ -18,7 +18,7 @@ use nectarlink_core::{DeviceId, Error, NodeEvent, Notification};
+ 
+ use crate::{
+     core_host, icons,
+-    state::{AppRule, Changes},
++    state::{AppRule, Changes, NotificationView},
+     win::toast::{self, Toast, ToastEvent},
+ };
+ 
+@@ -568,6 +568,86 @@ pub fn dismiss(device: &str, key: String) {
+     });
+ }
+ 
++/// Dismisses one notification the way the feed's X does: the phone is told,
++/// and Undo is offered. `ongoing` ones stay (the phone won't dismiss them).
++pub fn dismiss_with_undo(device: &str, key: String) {
++    if let Ok(dev_id) = device.parse::<DeviceId>() {
++        let found = core_host::host().hub.read(|s| {
++            s.notifications.iter().find(|n| n.device == dev_id && n.notification.key == key).cloned()
++        });
++        // The phone won't dismiss these, so it would only come back.
++        if found.as_ref().is_some_and(|v| v.notification.ongoing) {
++            return;
++        }
++        if let Some(view) = found {
++            let label = if view.notification.app_name.is_empty() {
++                tr!("Notifications", "Notification dismissed")
++            } else {
++                tr!("Notifications", "Dismissed from %1", view.notification.app_name)
++            };
++            core_host::host().hub.update(|s| s.record_dismissed(vec![view], label));
++        }
++    }
++    dismiss(device, key);
++}
++
++/// Dismisses every notification of one app (with Undo).
++pub fn dismiss_app_group(device: &str, app: &str) {
++    let Ok(dev_id) = device.parse::<DeviceId>() else { return };
++    let views: Vec<NotificationView> = core_host::host().hub.read(|s| {
++        s.notifications
++            .iter()
++            .filter(|n| n.device == dev_id && n.notification.app == app && !n.notification.ongoing)
++            .cloned()
++            .collect()
++    });
++    if views.is_empty() {
++        return;
++    }
++    let app_name = views[0].notification.app_name.clone();
++    let count = views.len();
++    let label = if count == 1 {
++        tr!("Notifications", "Dismissed from %1", app_name)
++    } else {
++        tr!("Notifications", "Dismissed %1 from %2", count, app_name)
++    };
++    let keys: Vec<String> = views.iter().map(|v| v.notification.key.clone()).collect();
++    core_host::host().hub.update(|s| s.record_dismissed(views, label));
++    for key in keys {
++        dismiss(device, key);
++    }
++}
++
++/// Dismisses every notification of a phone that can be dismissed ("Clear all", with Undo).
++pub fn dismiss_all_for(device: &str) {
++    let Ok(dev_id) = device.parse::<DeviceId>() else { return };
++    let views: Vec<NotificationView> = core_host::host().hub.read(|s| {
++        s.notifications
++            .iter()
++            .filter(|n| {
++                n.device == dev_id
++                    && !n.notification.ongoing
++                    && s.app_rule(&n.notification.app) != AppRule::Hidden
++            })
++            .cloned()
++            .collect()
++    });
++    if views.is_empty() {
++        return;
++    }
++    let count = views.len();
++    let label = if count == 1 {
++        tr!("Notifications", "Notification dismissed")
++    } else {
++        tr!("Notifications", "Dismissed %1 notifications", count)
++    };
++    let keys: Vec<String> = views.iter().map(|v| v.notification.key.clone()).collect();
++    core_host::host().hub.update(|s| s.record_dismissed(views, label));
++    for key in keys {
++        dismiss(device, key);
++    }
++}
++
+ /// Runs a notification's action on the phone (`reply` for a reply action).
+ pub fn run_action(device: &str, key: String, action: String, reply: Option<String>) {
+     let (Ok(device), Some(node)) = (device.parse::<DeviceId>(), core_host::node()) else { return };
+diff --git a/desktop/app/src/notifications_api.rs b/desktop/app/src/notifications_api.rs
+new file mode 100644
+index 0000000..4cb5ae1
+--- /dev/null
++++ b/desktop/app/src/notifications_api.rs
+@@ -0,0 +1,505 @@
++// SPDX-License-Identifier: GPL-3.0-or-later
++//! `/v1/notifications/*` of the local automation API (see `docs/api.md`):
++//! everything the Notifications section of the app does, for other local
++//! tools: the live feed with its groups and Live Updates, replies and
++//! actions, dismiss, clear all with Undo, history with search, and the
++//! per-app rules.
++//!
++//! The rows come from the same builder as the app's own feed, so groups,
++//! rules and counts always match what the window shows.
++
++use std::{
++    collections::HashMap,
++    sync::{OnceLock, atomic::AtomicU64},
++    time::Duration,
++};
++
++use nectarlink_core::{DeviceId, LinkState};
++use serde::Deserialize;
++use serde_json::{Value, json};
++use tokio::sync::watch;
++
++use crate::{
++    bridge::notifications::{Row, apps_json, build_rows, rule_name},
++    core_host, icons,
++    state::{AppRule, AppState, HistoryEntry},
++};
++
++type Reply = (u16, &'static str, Value);
++
++/// The longest a feed request may wait for news.
++const MAX_WAIT_SECS: u64 = 55;
++/// The most history entries one request returns.
++const MAX_HISTORY_LIMIT: usize = 300;
++
++static REVISION: OnceLock<watch::Sender<u64>> = OnceLock::new();
++static SUBSCRIBED: AtomicU64 = AtomicU64::new(0);
++
++/// A counter that goes up with every change to notifications, history, apps or phones.
++fn revision() -> &'static watch::Sender<u64> {
++    let tx = REVISION.get_or_init(|| watch::channel(1).0);
++    if SUBSCRIBED.swap(1, std::sync::atomic::Ordering::AcqRel) == 0 {
++        let tx = tx.clone();
++        #[cfg(not(test))]
++        core_host::host().hub.subscribe(
++            crate::state::Changes::NOTIFICATIONS
++                | crate::state::Changes::HISTORY
++                | crate::state::Changes::APPS
++                | crate::state::Changes::DEVICES,
++            move || {
++                tx.send_modify(|v| *v += 1);
++                true
++            },
++        );
++        #[cfg(test)]
++        drop(tx);
++    }
++    tx
++}
++
++fn ok() -> Reply {
++    (200, "OK", json!({ "ok": true }))
++}
++
++fn bad(error: &str) -> Reply {
++    (400, "Bad Request", json!({ "ok": false, "error": error }))
++}
++
++fn not_found(error: &str) -> Reply {
++    (404, "Not Found", json!({ "ok": false, "error": error }))
++}
++
++fn parse<T: for<'de> Deserialize<'de> + Default>(body: &[u8]) -> Result<T, Reply> {
++    if body.iter().all(u8::is_ascii_whitespace) {
++        return Ok(T::default());
++    }
++    serde_json::from_slice(body).map_err(|_| bad("invalid_json"))
++}
++
++fn color(c: Option<u32>) -> String {
++    c.map(|c| format!("#{:06X}", c & 0x00FF_FFFF)).unwrap_or_default()
++}
++
++/// One notification as the cards show it.
++fn row_json(row: &Row) -> Value {
++    let n = &row.view.notification;
++    let reply = n.actions.iter().find(|a| a.reply);
++    let live = n.live.as_ref().map(|live| {
++        json!({
++            "progress": live.progress.unwrap_or(0),
++            "max": live.max.unwrap_or(0),
++            "indeterminate": live.indeterminate,
++            "chip": live.chip.as_deref().unwrap_or_default(),
++            "segments": live.segments.iter().map(|s| json!({ "length": s.length, "color": color(s.color) })).collect::<Vec<_>>(),
++            "points": live.points.iter().map(|p| json!({ "position": p.position, "color": color(p.color) })).collect::<Vec<_>>(),
++            "chronometer": live.chronometer,
++            "countdown": live.countdown,
++            "when": n.when,
++        })
++    });
++    json!({
++        "deviceId": row.view.device.to_string(),
++        "deviceName": row.device_name,
++        "key": n.key,
++        "app": n.app,
++        "appName": n.app_name,
++        "title": n.title.as_deref().unwrap_or_default(),
++        "text": n.text.as_deref().unwrap_or_default(),
++        "sub": n.sub.as_deref().unwrap_or_default(),
++        "when": n.when,
++        "iconUrl": row.icon_url,
++        "imageUrl": row.image_url,
++        // Buttons other than the reply: [{ id, title }].
++        "actions": n.actions.iter().filter(|a| !a.reply).map(|a| json!({ "id": a.id, "title": a.title })).collect::<Vec<_>>(),
++        "replyAction": reply.map_or("", |a| a.id.as_str()),
++        "replyLabel": reply.map_or("", |a| a.title.as_str()),
++        "silent": n.silent,
++        "ongoing": n.ongoing,
++        // Replies sent from this PC: [{ text, pending }].
++        "replies": row.replies.iter().map(|r| json!({ "text": r.text, "pending": r.pending })).collect::<Vec<_>>(),
++        "otpCode": crate::notifications::notification_otp(n).unwrap_or_default(),
++        "live": live,
++        "conversation": n.conversation.as_ref().and_then(|c| serde_json::to_value(c).ok()),
++        "groupCount": row.group_count,
++        "groupIndex": row.group_index,
++        "groupExpanded": row.group_expanded,
++        "groupSummary": row.group_summary,
++    })
++}
++
++/// The feed: rows, the count the app shows, Undo and the history switch.
++fn feed(device: Option<DeviceId>) -> Value {
++    let (rows, undo, history, online) = core_host::host().hub.read(|s: &AppState| {
++        let online: HashMap<String, bool> = s
++            .devices
++            .iter()
++            .map(|d| (d.id.to_string(), matches!(d.link, LinkState::Online { .. })))
++            .collect();
++        (build_rows(s), s.last_dismissed_label.clone(), s.history_enabled, online)
++    });
++    let rows: Vec<&Row> = rows.iter().filter(|r| device.is_none_or(|d| r.view.device == d)).collect();
++    // Like the app: each group counts once for all its members.
++    let count: i32 = rows.iter().filter(|r| r.group_index == 0).map(|r| r.group_count).sum();
++    json!({
++        "ok": true,
++        "rev": *revision().borrow(),
++        "count": count,
++        "undoLabel": undo,
++        "historyEnabled": history,
++        "online": online,
++        "items": rows.iter().map(|r| row_json(r)).collect::<Vec<_>>(),
++    })
++}
++
++fn device_from(query: &HashMap<String, String>) -> Option<DeviceId> {
++    query.get("device").and_then(|d| d.parse().ok())
++}
++
++/// The phone to act on: the one asked for, else the one that owns `key`,
++/// else the first online one.
++fn target(requested: Option<&str>, key: Option<&str>) -> Option<String> {
++    if let Some(id) = requested.map(str::trim).filter(|s| !s.is_empty()) {
++        return id.parse::<DeviceId>().ok().map(|d| d.to_string());
++    }
++    core_host::host().hub.read(|s| {
++        if let Some(key) = key
++            && let Some(v) = s.notifications.iter().find(|n| n.notification.key == key)
++        {
++            return Some(v.device.to_string());
++        }
++        s.devices
++            .iter()
++            .find(|d| matches!(d.link, LinkState::Online { .. }))
++            .or_else(|| s.devices.first())
++            .map(|d| d.id.to_string())
++    })
++}
++
++fn history_json(entry: &HistoryEntry, s: &AppState) -> Value {
++    let n = &entry.notification;
++    json!({
++        "deviceId": entry.device.to_string(),
++        "deviceName": s.name_of(&entry.device).unwrap_or_default(),
++        "key": n.key,
++        "app": n.app,
++        "appName": n.app_name,
++        "title": n.title.as_deref().unwrap_or_default(),
++        "text": n.text.as_deref().unwrap_or_default(),
++        "sub": n.sub.as_deref().unwrap_or_default(),
++        "when": n.when,
++        "removedAt": entry.removed_at,
++        "iconUrl": s.app_icons.get(&n.app).map(|p| icons::file_url(p)).unwrap_or_default(),
++    })
++}
++
++fn matches_query(entry: &HistoryEntry, query: &str) -> bool {
++    let n = &entry.notification;
++    [Some(n.app_name.as_str()), n.title.as_deref(), n.text.as_deref(), n.sub.as_deref()]
++        .into_iter()
++        .flatten()
++        .any(|field| field.to_lowercase().contains(query))
++}
++
++fn history(query: &HashMap<String, String>) -> Value {
++    let q = query.get("q").map(|q| q.trim().to_lowercase()).unwrap_or_default();
++    let limit = query
++        .get("limit")
++        .and_then(|l| l.parse::<usize>().ok())
++        .unwrap_or(MAX_HISTORY_LIMIT)
++        .clamp(1, MAX_HISTORY_LIMIT);
++    let device = device_from(query);
++    core_host::host().hub.read(|s| {
++        let total = s.history.len();
++        let items: Vec<Value> = s
++            .history
++            .iter()
++            .filter(|h| s.app_rule(&h.notification.app) != AppRule::Hidden)
++            .filter(|h| device.is_none_or(|d| h.device == d))
++            .filter(|h| q.is_empty() || matches_query(h, &q))
++            .take(limit)
++            .map(|h| history_json(h, s))
++            .collect();
++        json!({
++            "ok": true,
++            "rev": *revision().borrow(),
++            "enabled": s.history_enabled,
++            "total": total,
++            "items": items,
++        })
++    })
++}
++
++fn rules() -> Value {
++    core_host::host().hub.read(|s| {
++        json!({
++            "ok": true,
++            "historyEnabled": s.history_enabled,
++            "apps": serde_json::from_str::<Value>(&apps_json(s)).unwrap_or_else(|_| json!([])),
++        })
++    })
++}
++
++#[derive(Debug, Default, Deserialize)]
++struct ActionPayload {
++    #[serde(default)]
++    device: Option<String>,
++    #[serde(default)]
++    key: String,
++    #[serde(default)]
++    action: String,
++    #[serde(default)]
++    reply: Option<String>,
++}
++
++#[derive(Debug, Default, Deserialize)]
++struct DismissPayload {
++    #[serde(default)]
++    device: Option<String>,
++    #[serde(default)]
++    key: String,
++    #[serde(default)]
++    app: String,
++}
++
++#[derive(Debug, Default, Deserialize)]
++struct RulePayload {
++    #[serde(default)]
++    app: Option<String>,
++    #[serde(default)]
++    rule: Option<String>,
++    #[serde(default, rename = "historyEnabled")]
++    history_enabled: Option<bool>,
++}
++
++#[derive(Debug, Default, Deserialize)]
++struct CodePayload {
++    #[serde(default)]
++    code: String,
++}
++
++#[derive(Debug, Default, Deserialize)]
++struct OpenAppPayload {
++    #[serde(default)]
++    device: Option<String>,
++    #[serde(default)]
++    app: String,
++    #[serde(default, rename = "appName")]
++    app_name: Option<String>,
++}
++
++/// Waits (up to `wait` seconds) until the revision moves past `since`.
++async fn wait_for_news(since: u64, wait: u64) {
++    let mut rx = revision().subscribe();
++    let _ =
++        tokio::time::timeout(Duration::from_secs(wait.min(MAX_WAIT_SECS)), rx.wait_for(|rev| *rev != since))
++            .await;
++}
++
++/// Handles a `/v1/notifications...` request, or `None` if the path isn't one of ours.
++pub async fn route(method: &str, path: &str, query: &HashMap<String, String>, body: &[u8]) -> Option<Reply> {
++    let sub = path.strip_prefix("/v1/notifications")?;
++    let sub = sub.trim_end_matches('/');
++    Some(match (method, sub) {
++        ("GET", "") => {
++            if let (Some(since), Some(wait)) = (
++                query.get("since").and_then(|v| v.parse::<u64>().ok()),
++                query.get("wait").and_then(|v| v.parse::<u64>().ok()),
++            ) && wait > 0
++                && since == *revision().borrow()
++            {
++                wait_for_news(since, wait).await;
++            }
++            (200, "OK", feed(device_from(query)))
++        }
++        ("GET", "/history") => (200, "OK", history(query)),
++        ("GET", "/rules") => (200, "OK", rules()),
++        ("POST", "/action") => match parse::<ActionPayload>(body) {
++            Ok(p) => action(p),
++            Err(e) => e,
++        },
++        ("POST", "/dismiss") => match parse::<DismissPayload>(body) {
++            Ok(p) if p.key.is_empty() => bad("missing_key"),
++            Ok(p) => match target(p.device.as_deref(), Some(&p.key)) {
++                Some(device) => {
++                    crate::notifications::dismiss_with_undo(&device, p.key);
++                    ok()
++                }
++                None => not_found("no_device"),
++            },
++            Err(e) => e,
++        },
++        ("POST", "/dismiss-group") => match parse::<DismissPayload>(body) {
++            Ok(p) if p.app.is_empty() => bad("missing_app"),
++            Ok(p) => match target(p.device.as_deref(), None) {
++                Some(device) => {
++                    crate::notifications::dismiss_app_group(&device, &p.app);
++                    ok()
++                }
++                None => not_found("no_device"),
++            },
++            Err(e) => e,
++        },
++        ("POST", "/clear") => match parse::<DismissPayload>(body) {
++            Ok(p) => match target(p.device.as_deref(), None) {
++                Some(device) => {
++                    crate::notifications::dismiss_all_for(&device);
++                    ok()
++                }
++                None => not_found("no_device"),
++            },
++            Err(e) => e,
++        },
++        ("POST", "/undo") => {
++            core_host::host().hub.update(AppState::undo_dismiss);
++            ok()
++        }
++        ("POST", "/undo/clear") => {
++            core_host::host().hub.update(AppState::clear_undo);
++            ok()
++        }
++        ("POST", "/toggle-group") => match parse::<DismissPayload>(body) {
++            Ok(p) if p.app.is_empty() => bad("missing_app"),
++            Ok(p) => {
++                core_host::host().hub.update(|s| s.toggle_app_expanded(&p.app));
++                ok()
++            }
++            Err(e) => e,
++        },
++        ("POST", "/history/clear") => {
++            core_host::host().hub.update(AppState::clear_history);
++            ok()
++        }
++        ("POST", "/rules") => match parse::<RulePayload>(body) {
++            Ok(p) => rule(p),
++            Err(e) => e,
++        },
++        ("POST", "/copy-code") => match parse::<CodePayload>(body) {
++            Ok(p) if p.code.trim().is_empty() => bad("missing_code"),
++            Ok(p) => {
++                crate::notifications::copy_otp(&p.code);
++                ok()
++            }
++            Err(e) => e,
++        },
++        ("POST", "/open-app") => match parse::<OpenAppPayload>(body) {
++            Ok(p) => open_app(p),
++            Err(e) => e,
++        },
++        _ => not_found("not_found"),
++    })
++}
++
++fn action(p: ActionPayload) -> Reply {
++    if p.key.is_empty() {
++        return bad("missing_key");
++    }
++    if p.action.is_empty() {
++        return bad("missing_action");
++    }
++    let Some(device) = target(p.device.as_deref(), Some(&p.key)) else { return not_found("no_device") };
++    let reply = match p.reply {
++        Some(text) => {
++            let text = text.trim().to_owned();
++            if text.is_empty() {
++                return bad("empty_reply");
++            }
++            Some(text)
++        }
++        None => None,
++    };
++    crate::notifications::run_action(&device, p.key, p.action, reply);
++    ok()
++}
++
++fn rule(p: RulePayload) -> Reply {
++    if p.app.is_none() && p.history_enabled.is_none() {
++        return bad("nothing_to_change");
++    }
++    if let Some(app) = p.app.as_deref() {
++        let rule = match p.rule.as_deref() {
++            Some("show") => AppRule::Show,
++            Some("quiet") => AppRule::Quiet,
++            Some("hidden") => AppRule::Hidden,
++            _ => return bad("invalid_rule"),
++        };
++        crate::notifications::set_app_rule(app, rule);
++        debug_assert!(!rule_name(rule).is_empty());
++    }
++    if let Some(on) = p.history_enabled {
++        core_host::host().hub.update(|s| s.set_history_enabled(on));
++    }
++    ok()
++}
++
++fn open_app(p: OpenAppPayload) -> Reply {
++    if !nectarlink_core::is_package_name(&p.app) {
++        return bad("invalid_app");
++    }
++    let Some(device) = target(p.device.as_deref(), None).and_then(|d| d.parse::<DeviceId>().ok()) else {
++        return not_found("no_device");
++    };
++    let label = p.app_name.filter(|n| !n.is_empty()).unwrap_or_else(|| p.app.clone());
++    crate::mirror::start_app(device, p.app, label);
++    ok()
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[tokio::test]
++    async fn unknown_paths_are_not_ours() {
++        let q = HashMap::new();
++        assert!(route("GET", "/v1/devices", &q, b"").await.is_none());
++        let reply = route("GET", "/v1/notifications/nope", &q, b"").await.unwrap();
++        assert_eq!(reply.0, 404);
++    }
++
++    #[tokio::test]
++    async fn bad_requests_are_refused_before_touching_the_app() {
++        let q = HashMap::new();
++        let cases: &[(&str, &str, &[u8], &str)] = &[
++            ("POST", "/v1/notifications/action", b"{not json", "invalid_json"),
++            ("POST", "/v1/notifications/action", br#"{"action":"a"}"#, "missing_key"),
++            ("POST", "/v1/notifications/action", br#"{"key":"k"}"#, "missing_action"),
++            ("POST", "/v1/notifications/dismiss", b"{}", "missing_key"),
++            ("POST", "/v1/notifications/dismiss-group", b"{}", "missing_app"),
++            ("POST", "/v1/notifications/toggle-group", b"{}", "missing_app"),
++            ("POST", "/v1/notifications/copy-code", b"{}", "missing_code"),
++            ("POST", "/v1/notifications/rules", b"{}", "nothing_to_change"),
++            ("POST", "/v1/notifications/rules", br#"{"app":"com.x","rule":"loud"}"#, "invalid_rule"),
++            ("POST", "/v1/notifications/open-app", br#"{"app":"not a package"}"#, "invalid_app"),
++        ];
++        for (method, path, body, error) in cases {
++            let (status, _, value) = route(method, path, &q, body).await.unwrap();
++            assert_eq!(status, 400, "{path}");
++            assert_eq!(value["error"], *error, "{path}");
++        }
++    }
++
++    #[test]
++    fn history_search_matches_any_field_case_insensitively() {
++        use nectarlink_core::Notification;
++        let n = Notification {
++            key: "k".into(),
++            app: "com.whatsapp".into(),
++            app_name: "WhatsApp".into(),
++            title: Some("Dure Kafian".into()),
++            text: Some("Assalamualaikum".into()),
++            sub: None,
++            when: 1,
++            actions: Vec::new(),
++            silent: false,
++            ongoing: false,
++            icon: None,
++            image: None,
++            live: None,
++            conversation: None,
++        };
++        let entry = HistoryEntry { device: DeviceId([7u8; 32]), notification: n, removed_at: 2 };
++        assert!(matches_query(&entry, "dure"));
++        assert!(matches_query(&entry, "whatsapp"));
++        assert!(matches_query(&entry, "salam"));
++        assert!(!matches_query(&entry, "telegram"));
++    }
++}
+diff --git a/docs/api.md b/docs/api.md
+index b24267b..262fea3 100644
+--- a/docs/api.md
++++ b/docs/api.md
+@@ -249,6 +249,55 @@ separated by newlines) or the link.
+ 
+ ---
+ 
++### Notifications
++
++Everything the app's Notifications section does. The rows come from the same builder as the app's own feed, so
++groups, per-app rules and the count match the window.
++
++`GET /v1/notifications[?device=<id>&since=<rev>&wait=<seconds>]` returns the live feed:
++
++```json
++{
++  "ok": true, "rev": 42, "count": 3, "undoLabel": "Dismissed from WhatsApp", "historyEnabled": true,
++  "online": { "<device id>": true },
++  "items": [{
++    "deviceId": "a1b2c3...", "deviceName": "Pixel 9 Pro", "key": "0|com.whatsapp|1|null|10123",
++    "app": "com.whatsapp", "appName": "WhatsApp", "title": "Alice", "text": "Hi", "sub": "",
++    "when": 1730000000000, "iconUrl": "file:///...", "imageUrl": "",
++    "actions": [{ "id": "mark_read", "title": "Mark as read" }],
++    "replyAction": "reply", "replyLabel": "Reply", "silent": false, "ongoing": false,
++    "replies": [{ "text": "On my way", "pending": false }], "otpCode": "", "live": null, "conversation": null,
++    "groupCount": 1, "groupIndex": 0, "groupExpanded": false, "groupSummary": ""
++  }]
++}
++```
++
++`rev` goes up with every change. Pass `since=<rev>&wait=<seconds>` (at most 55) to wait for news: the call returns as soon
++as `rev` changes, or after `wait` seconds with the same feed. `count` is what the app's header shows (each group counts all
++its members). Hidden apps are left out. `iconUrl` and `imageUrl` are `file://` URLs on this PC.
++
++| Request | Body | Does |
++|---|---|---|
++| `POST /v1/notifications/action` | `{ "key", "action", "reply"?, "device"? }` | Runs an action on the phone; with `reply` it sends the text through the app's reply action. |
++| `POST /v1/notifications/dismiss` | `{ "key", "device"? }` | Dismisses one (Undo is offered). Ongoing ones stay. |
++| `POST /v1/notifications/dismiss-group` | `{ "app", "device"? }` | Dismisses all of one app's. |
++| `POST /v1/notifications/clear` | `{ "device"? }` | Clear all. |
++| `POST /v1/notifications/undo` | | Restores what was dismissed last. |
++| `POST /v1/notifications/undo/clear` | | Forgets the Undo offer. |
++| `POST /v1/notifications/toggle-group` | `{ "app" }` | Expands or collapses an app's group. |
++| `GET /v1/notifications/history` | `?q=<text>&limit=<n>&device=<id>` | Dismissed notifications of the last 24 hours, newest first. |
++| `POST /v1/notifications/history/clear` | | Clears the history. |
++| `GET /v1/notifications/rules` | | `{ "historyEnabled", "apps": [{ "app", "name", "icon", "rule" }] }` |
++| `POST /v1/notifications/rules` | `{ "app", "rule": "show"\|"quiet"\|"hidden" }` and/or `{ "historyEnabled" }` | Sets an app's rule, and/or turns history on or off. |
++| `POST /v1/notifications/copy-code` | `{ "code" }` | Copies a one-time code to the PC clipboard. |
++| `POST /v1/notifications/open-app` | `{ "app", "appName"?, "device"? }` | Opens the phone's app in a window on this PC (app windows). |
++
++`device` defaults to the notification's phone, or else the first online phone. Errors: `400` with `invalid_json`,
++`missing_key`, `missing_action`, `missing_app`, `empty_reply`, `invalid_rule`, `invalid_app`, `missing_code` or
++`nothing_to_change`; `404` with `no_device`.
++
++---
++
+ ## 4. Examples
+ 
+ ### PowerShell
