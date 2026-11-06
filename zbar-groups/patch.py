@@ -16,6 +16,8 @@ def bar(s):
     s = s.replace("open: iconRow.hot", "open: false")
     # 2. the tray stays up while the pointer is on it
     s = s.replace("readonly property bool wantOpen: barLeftSideMouseArea.hovered ||", "readonly property bool wantOpen: barLeftSideMouseArea.hovered || leftTray.hovered ||", 1)
+    # 2c. ...and while any widget's right-click menu is open (closing the tray under an open menu dismissed the menu)
+    s = s.replace("leftTray.hovered ||", "leftTray.hovered || " + " || ".join(f"{b}.menuOpen === true" for _, b, *_ in ENT) + " ||", 1)
     # 2b. stay open a bit longer after the pointer leaves (the tray is a jump away from the bar)
     s = s.replace("id: closeTimer; interval: 700;", "id: closeTimer; interval: 1000;", 1)
     # 3. the tray itself
