@@ -17,7 +17,7 @@ def bar(s):
     # 2. the tray stays up while the pointer is on it
     s = s.replace("readonly property bool wantOpen: barLeftSideMouseArea.hovered ||", "readonly property bool wantOpen: barLeftSideMouseArea.hovered || leftTray.hovered ||", 1)
     # 2b. stay open a bit longer after the pointer leaves (the tray is a jump away from the bar)
-    s = s.replace("id: closeTimer; interval: 700;", "id: closeTimer; interval: 1500;", 1)
+    s = s.replace("id: closeTimer; interval: 700;", "id: closeTimer; interval: 1000;", 1)
     # 3. the tray itself
     def grp(keys):
         return "[" + ", ".join(f'{{ key: "{k}", btn: {by[k][0]}, slot: slot_{k}, label: "{by[k][1]}", icon: "{by[k][2]}", size: {by[k][3]} }}' for k in keys) + "]"
