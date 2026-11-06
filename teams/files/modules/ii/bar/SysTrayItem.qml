@@ -26,7 +26,7 @@ MouseArea {
         case Qt.LeftButton:
             if (`${item.id} ${item.title}`.toLowerCase().includes("teams"))
             // teams-for-linux tray click fails to re-show a hidden window; a 2nd instance shows/focuses it
-            Quickshell.execDetached(["/opt/teams-for-linux/teams-for-linux", "--ozone-platform=x11"]);
+            Quickshell.execDetached(["bash", "-c", "$HOME/.config/hypr/custom/teams-watchdog.sh"]);
         else
             item.activate();
             break;

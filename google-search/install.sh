@@ -15,13 +15,11 @@ install -Dm644 "$REPO/GoogleSearchButton.qml" "$Q/modules/ii/bar/GoogleSearchBut
 rm -f "$Q/modules/ii/bar/GoogleSearchPopup.qml"   # merged into GoogleSearchButton.qml
 install -Dm755 "$REPO/gsearch.sh" "$HOME/.config/hypr/custom/gsearch.sh"
 install -Dm644 "$REPO/gsearch.qml" "$HOME/.config/hypr/custom/gsearch.qml"
-rm -f "$HOME/.config/hypr/custom/gsearch.py"
+rm -f "$HOME/.config/hypr/custom/gsearch.py" "$HOME/.config/hypr/custom/gsearch-pip.qml" "$HOME/.config/hypr/custom/gsearch-popout.sh"
 # keep the old PySide6 profile (cookies, solved captcha) once
 OLD="$HOME/.local/share/gsearch.py/QtWebEngine/gsearch"; NEW="$HOME/.local/share/gsearch"
 [ -d "$OLD" ] && [ ! -e "$NEW/.migrated-from-pyside" ] && { [ -d "$NEW" ] && mv "$NEW" "$HOME/backups/gsearch-profile-$(date +%Y%m%d-%H%M%S)"; cp -r "$OLD" "$NEW"; touch "$NEW/.migrated-from-pyside"; } || true
 install -Dm755 "$REPO/gsearch-resize.sh" "$HOME/.config/hypr/custom/gsearch-resize.sh"
-install -Dm644 "$REPO/gsearch-pip.qml" "$HOME/.config/hypr/custom/gsearch-pip.qml"
-install -Dm755 "$REPO/gsearch-popout.sh" "$HOME/.config/hypr/custom/gsearch-popout.sh"
 install -Dm755 "$REPO/gsearch-open.sh" "$HOME/.config/hypr/custom/gsearch-open.sh"
 install -Dm755 "$REPO/gsearch-close.sh" "$HOME/.config/hypr/custom/gsearch-close.sh"
 rm -f "$HOME/.config/hypr/custom/gsearch-close-delay"   # old close-timing knob: the panel now slides a still of the browser out itself

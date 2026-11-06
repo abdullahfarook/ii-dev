@@ -20,6 +20,7 @@ WidgetBase {
     // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
     property string memQuery: ""
     property string memUrl: ""
+    property string keepUrl: "" // tag active: this page stays alive (hidden) in the helper while the panel is closed; cleared when navigating elsewhere
     property int memWidth: 440 // widget width chosen by dragging its right edge (memory only)
     // Suggestion history (recent searches / addresses, newest first): saved to disk so it survives shell restarts.
     // Every bar has its own button, so the popup reloads the file when it opens and saves after each change.
@@ -57,7 +58,6 @@ WidgetBase {
         property real progress: 0
         property bool canBack: false
         property bool canForward: false
-        property bool hasVideo: false
         property bool fullscreen: false // the page video is fullscreen: hide the card
         readonly property string bin: Quickshell.env("HOME") + "/.config/hypr/custom/gsearch.sh"
         property int cardWidth: target.memWidth
@@ -84,11 +84,11 @@ WidgetBase {
         property bool suggestOpen: false
         property int sel: -1
         property var suggestions: []
-        function refreshSuggestions() { // only while typing, and only entries related to the typed text
+        function refreshSuggestions(showRecent) { // only while typing, and only entries related to the typed text
             const q = input.text.trim().toLowerCase();
             const h = target.history ?? [];
             sel = -1;
-            if (q === "") { suggestions = []; suggestOpen = false; return; }
+            if (q === "") { suggestions = showRecent === true ? h.slice(0, 8) : []; suggestOpen = suggestions.length > 0; return; } // empty field: only a double click lists recent searches
             const r = h.filter(x => x.toLowerCase().includes(q) && x.toLowerCase() !== q);
             suggestions = r.filter(x => x.toLowerCase().startsWith(q)).concat(r.filter(x => !x.toLowerCase().startsWith(q))).slice(0, 8);
             suggestOpen = suggestions.length > 0;
@@ -113,7 +113,7 @@ WidgetBase {
             const url = gq.target.memUrl ?? "";
             if (url !== "") gq.loading = true;
             Quickshell.execDetached({
-                command: url !== "" ? [bin, "goto", url] : [bin, "show", ""],
+                command: url !== "" ? [bin, target.keepUrl === url ? "resume" : "goto", url] : [bin, "show", ""],
                 environment: { GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) }
             });
         }
@@ -130,6 +130,7 @@ WidgetBase {
         function closeBrowser() {
             if (closed) return;
             closed = true;
+            if (target.keepUrl !== "") { Quickshell.execDetached([scriptDir + "/gsearch-close.sh", "keep"]); return }
             if (query.trim() === "") { target.memUrl = ""; target.memQuery = "" } // cleared and closed: don't restore the last page next time
             Quickshell.execDetached([scriptDir + "/gsearch-close.sh"]);
         }
@@ -200,12 +201,12 @@ WidgetBase {
             stdout: SplitParser {
                 onRead: line => {
                     if (line === "shown") { gq.browserShown = true; if (gq.cardWidth !== 440) gq.applyWidth(); Quickshell.execDetached([gq.scriptDir + "/gsearch-open.sh"]) } // open.sh is idempotent: re-shows the browser workspace if it got out of sync
-                    else if (line.startsWith("popout ")) { const i = line.indexOf(" ", 7); Quickshell.execDetached([gq.scriptDir + "/gsearch-popout.sh", line.slice(7, i), line.slice(i + 1)]) }
-                    else if (line === "popout-none") Quickshell.execDetached(["notify-send", "-a", "Google", "No video on this page"])
                     else if (line.startsWith("fullscreen ")) gq.fullscreen = line.endsWith("1")
-                    else if (line.startsWith("video ")) gq.hasVideo = line.endsWith("1")
                     else if (line.startsWith("nav ")) { const p = line.split(" "); gq.canBack = p[1] === "1"; gq.canForward = p[2] === "1" }
-                    else if (line.startsWith("url ")) gq.target.memUrl = line.slice(4)
+                    else if (line.startsWith("url ")) {
+                        gq.target.memUrl = line.slice(4);
+                        if (gq.target.keepUrl !== "" && gq.target.memUrl !== gq.target.keepUrl) gq.target.keepUrl = "" // navigated elsewhere: tag unselected
+                    }
                     else if (line === "loading") { gq.loading = true; gq.progress = 0 }
                     else if (line.startsWith("progress ")) gq.progress = Number(line.slice(9)) / 100
                     else if (line === "done" || line === "failed") gq.loading = false
@@ -383,23 +384,27 @@ WidgetBase {
                         { icon: "arrow_back", tip: "Back", cmd: "back", on: gq.canBack },
                         { icon: "arrow_forward", tip: "Forward", cmd: "forward", on: gq.canForward },
                         { icon: gq.loading ? "close" : "refresh", tip: gq.loading ? "Stop" : "Reload", cmd: gq.loading ? "stop" : "reload", on: true },
-                        { icon: "picture_in_picture_alt", tip: "Pop out video", cmd: "popout", on: true },
+                        { icon: "push_pin", tip: gq.target.keepUrl !== "" ? "Page kept in memory (click to release)" : "Keep this page running in memory when closed", cmd: "keep", on: true },
                         { icon: "open_in_new", tip: "Open in browser", cmd: "open", on: true }
                     ]
                     delegate: RippleButton {
                         required property var modelData
-                        visible: modelData.cmd !== "popout" || gq.hasVideo
                         implicitWidth: 26; implicitHeight: 26
                         buttonRadius: Appearance.rounding.full
                         colBackground: "transparent"
                         colBackgroundHover: Appearance.colors.colLayer2Hover
                         enabled: modelData.on
-                        onClicked: Quickshell.execDetached([gq.bin, modelData.cmd])
+                        toggled: modelData.cmd === "keep" && gq.target.keepUrl !== ""
+                        onClicked: {
+                            if (modelData.cmd === "keep") gq.target.keepUrl = gq.target.keepUrl !== "" ? "" : (gq.target.memUrl ?? "");
+                            else Quickshell.execDetached([gq.bin, modelData.cmd]);
+                        }
                         contentItem: MaterialSymbol {
                             horizontalAlignment: Text.AlignHCenter
                             text: modelData.icon
                             iconSize: Appearance.font.pixelSize.larger
-                            color: modelData.on ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutlineVariant
+                            fill: (modelData.cmd === "keep" && gq.target.keepUrl !== "") ? 1 : 0
+                            color: (modelData.cmd === "keep" && gq.target.keepUrl !== "") ? Appearance.colors.colOnPrimary : (modelData.on ? Appearance.colors.colOnLayer1 : Appearance.colors.colOutlineVariant)
                         }
                         StyledToolTip { text: modelData.tip; visible: parent.hovered }
                     }
@@ -447,6 +452,7 @@ WidgetBase {
                             gq.refreshSuggestions(); // typing only suggests; searching needs Enter
                         }
                         onActiveFocusChanged: if (!activeFocus) gq.suggestOpen = false
+                        TapHandler { acceptedButtons: Qt.LeftButton; onDoubleTapped: { gq.target.loadHistory(); gq.refreshSuggestions(true) } } // double click: recent searches
                         Keys.onEscapePressed: { if (gq.suggestOpen) gq.suggestOpen = false; else root.close() }
                         Keys.onDownPressed: {
                             if (!gq.suggestOpen) gq.refreshSuggestions();

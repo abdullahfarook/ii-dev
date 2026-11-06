@@ -8,5 +8,6 @@ sleep 0.1   # Hyprland hides the workspace by itself once its last window is gon
 same || exit 0
 hyprctl monitors | grep -q "special workspace: .* (special:gsearch)" \
     && hyprctl dispatch 'hl.dsp.workspace.toggle_special("gsearch")' >/dev/null
+[ "$1" = keep ] && exit 0   # tag active: the helper (and its page) stays alive, hidden
 sleep 1; same || exit 0
 exec "$HOME/.config/hypr/custom/gsearch.sh" hide

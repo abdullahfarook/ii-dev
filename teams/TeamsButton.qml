@@ -89,7 +89,7 @@ RippleButton {
                 Repeater {
                     model: [
                         { label: "Open Teams", icon: "forum", cmd: "$HOME/.config/hypr/custom/teams-panel.sh" },
-                        { label: "Quit Teams", icon: "power_settings_new", cmd: "pkill -f /opt/teams-for-linux/teams-for-linux" }
+                        { label: "Quit Teams", icon: "power_settings_new", cmd: "pkill -f teams-watchdog.sh; pkill -f /opt/teams-for-linux/teams-for-linux" }
                     ]
                     RippleButton {
                         required property var modelData

@@ -11,7 +11,7 @@ wait_win() {
         [ -n "${2:-}" ] && [ $((i % 15)) -eq 0 ] && launch
     done; return 1
 }
-launch() { nohup /opt/teams-for-linux/teams-for-linux --ozone-platform=x11 >/dev/null 2>&1 9>&- & }
+launch() { nohup "$HOME/.config/hypr/custom/teams-watchdog.sh" >/dev/null 2>&1 9>&- & }
 if [ "${1:-}" = dock ]; then   # at login: park the window on the (hidden) special workspace without showing it
     "$P" dock teams "$W" || wait_win 600; exit 0
 fi
