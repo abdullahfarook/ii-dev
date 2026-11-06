@@ -25,7 +25,7 @@ ShellRoot {
             function state(): string {
                 return JSON.stringify({ connected: st.connected, count: st.count, feed: st.feed.count, hist: st.history.count, histCount: st.historyCount, undo: st.undoLabel,
                     dark: Theme.dark, seed: Theme.seed, primary: "" + Theme.primary, surface: "" + Theme.surface, card: "" + Theme.cardColor,
-                    mode: pn.mode, lightbox: pn.lightbox, query: pn.query, appFilter: pn.appFilter, chips: st.appList.map(a => a.name + ":" + a.count),
+                    mode: pn.mode, lightbox: pn.lightbox, appFilter: pn.appFilter, chips: st.appList.map(a => a.name + ":" + a.count),
                     titles: Array.from({ length: st.feed.count }, (_, i) => st.feed.get(i).title + "#" + st.feed.get(i).groupIndex),
                     replying: Array.from({ length: st.feed.count }, (_, i) => win.card(i) ? win.card(i).replying : null) })
             }
@@ -40,7 +40,7 @@ ShellRoot {
             function clearAll(): void { win.click(pn, it => it.symbol === "clear_all" && typeof it.clicked === "function") }
             function undo(): void { win.click(pn, it => it.label === "Undo" && typeof it.clicked === "function") }
             function history(): void { win.click(pn, it => it.symbol === "history" && typeof it.clicked === "function") }
-            function search(q: string): void { if (pn.mode === "history") pn.historySearchInput.text = q; else pn.searchInput.text = q }
+            function search(q: string): void { pn.historySearchInput.text = q }
             function rules(): void { pn.openRules("", "") }
             function chip(label: string): bool { return win.click(pn, it => it.label !== undefined && it.label.indexOf(label) === 0 && typeof it.clicked === "function") }
             function image(i: int): void { pn.lightbox = win.card(i).imageUrl }

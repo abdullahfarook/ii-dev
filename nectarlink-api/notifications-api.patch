@@ -333,10 +333,10 @@ index 94cb914..f6b0c48 100644
      let (Ok(device), Some(node)) = (device.parse::<DeviceId>(), core_host::node()) else { return };
 diff --git a/desktop/app/src/notifications_api.rs b/desktop/app/src/notifications_api.rs
 new file mode 100644
-index 0000000..807c9eb
+index 0000000..791fff2
 --- /dev/null
 +++ b/desktop/app/src/notifications_api.rs
-@@ -0,0 +1,555 @@
+@@ -0,0 +1,571 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +//! `/v1/notifications/*` of the local automation API (see `docs/api.md`):
 +//! everything the Notifications section of the app does, for other local
@@ -770,6 +770,10 @@ index 0000000..807c9eb
 +            }
 +            Err(e) => e,
 +        },
++        ("POST", "/mirror") => match parse::<OpenAppPayload>(body) {
++            Ok(p) => mirror_screen(p.device.as_deref()),
++            Err(e) => e,
++        },
 +        ("POST", "/open-app") => match parse::<OpenAppPayload>(body) {
 +            Ok(p) => open_app(p),
 +            Err(e) => e,
@@ -817,6 +821,18 @@ index 0000000..807c9eb
 +    if let Some(on) = p.history_enabled {
 +        core_host::host().hub.update(|s| s.set_history_enabled(on));
 +    }
++    ok()
++}
++
++/// Asks the phone for its screen (the "Mirror screen" tile of the app's Home page).
++fn mirror_screen(device: Option<&str>) -> Reply {
++    let Some(device) = target(device, None).and_then(|d| d.parse::<DeviceId>().ok()) else {
++        return not_found("no_device");
++    };
++    #[cfg(not(test))]
++    crate::mirror::start(device);
++    #[cfg(test)]
++    let _ = device;
 +    ok()
 +}
 +
@@ -893,10 +909,10 @@ index 0000000..807c9eb
 +    }
 +}
 diff --git a/docs/api.md b/docs/api.md
-index b24267b..c42902b 100644
+index b24267b..dc02fb3 100644
 --- a/docs/api.md
 +++ b/docs/api.md
-@@ -249,6 +249,57 @@ separated by newlines) or the link.
+@@ -249,6 +249,58 @@ separated by newlines) or the link.
  
  ---
  
@@ -943,6 +959,7 @@ index b24267b..c42902b 100644
 +| `POST /v1/notifications/rules` | `{ "app", "rule": "show"\|"quiet"\|"hidden" }` and/or `{ "historyEnabled" }` | Sets an app's rule, and/or turns history on or off. |
 +| `POST /v1/notifications/copy-code` | `{ "code" }` | Copies a one-time code to the PC clipboard. |
 +| `GET /v1/notifications/theme` | | The app's look: `{ theme, seed, colorMode, amoled, systemDark, wallpaperColors, phoneColors }` (the JSON its own Theme reads), so a tool can paint like it. |
++| `POST /v1/notifications/mirror` | `{ "device"? }` | Asks the phone for its screen (the Home page's "Mirror screen"). |
 +| `POST /v1/notifications/open-app` | `{ "app", "appName"?, "device"? }` | Opens the phone's app in a window on this PC (app windows). |
 +
 +`device` defaults to the notification's phone, or else the first online phone. Errors: `400` with `invalid_json`,

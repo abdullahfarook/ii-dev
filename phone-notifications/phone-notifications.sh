@@ -5,6 +5,7 @@
 #   phone-notifications.sh history [QUERY]  dismissed notifications of the last 24 h (optionally filtered)
 #   phone-notifications.sh rules            per-app rules and the history switch
 #   phone-notifications.sh post PATH [JSON] POST to /v1/notifications/PATH
+#   phone-notifications.sh mirror|ring|send-clipboard|send-files   the phone's quick actions (Mirror screen, Find phone, Send clipboard, Send files)
 #   phone-notifications.sh theme            NectarLink's theme (settings, wallpaper colors)
 #   phone-notifications.sh devices          paired phones (battery, online)
 #   phone-notifications.sh start            start NectarLink in the tray (no window) if it is not running
@@ -40,6 +41,16 @@ case "${1:-}" in
   history) api GET "/v1/notifications/history?q=$(enc "${2:-}")" ;;
   rules) api GET "/v1/notifications/rules" ;;
   devices) api GET "/v1/devices" ;;
+  mirror) api POST "/v1/notifications/mirror" "{}" ;;          # the phone's screen in a NectarLink window
+  ring) api POST "/v1/ring" "{}" ;;                              # find my phone
+  send-clipboard) # what is copied on this PC goes to the phone
+    text=$(wl-paste --no-newline 2>/dev/null) || text=""
+    [ -n "$text" ] || { echo '{"ok":false,"error":"empty_clipboard"}'; exit 0; }
+    api POST "/v1/send" "$(jq -n --arg t "$text" '{text:$t}')" ;;
+  send-files) # choose files, they go to the phone
+    files=$(kdialog --title "Send files to phone" --getopenfilename "$HOME" --multiple --separate-output 2>/dev/null) || exit 0
+    [ -n "$files" ] || exit 0
+    api POST "/v1/send" "$(printf '%s\n' "$files" | jq -R . | jq -sc '{paths: .}')" ;;
   theme) api GET "/v1/notifications/theme" ;;
   post) body="${3:-}"; [ -n "$body" ] || body="{}"; api POST "/v1/notifications/${2#/}" "$body" ;;
   copy) printf '%s' "${2:-}" | wl-copy ;;
@@ -62,5 +73,5 @@ case "${1:-}" in
   start-window) # like start, but with the window
     if [ -x "$BIN_PATCHED" ]; then setsid nohup "$BIN_PATCHED" >/dev/null 2>&1 < /dev/null &
     elif [ -x "$BIN_APPIMAGE" ]; then setsid nohup "$BIN_APPIMAGE" >/dev/null 2>&1 < /dev/null & fi ;;
-  *) echo "usage: $0 feed|history|rules|devices|post|copy|start|open" >&2; exit 2 ;;
+  *) echo "usage: $0 feed|history|rules|theme|devices|post|copy|start|open|mirror|ring|send-clipboard|send-files" >&2; exit 2 ;;
 esac

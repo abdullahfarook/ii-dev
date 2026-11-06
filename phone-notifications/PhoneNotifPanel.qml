@@ -13,7 +13,6 @@ FocusScope {
     id: pn
     required property var store
     property string mode: "list"           // list | history | rules
-    property string query: ""               // search in the feed
     property string appFilter: ""           // "" = all apps, else a package name
     property string rulesApp: ""            // rules view opened from a card's "...": only that app
     property string rulesAppName: ""
@@ -21,15 +20,10 @@ FocusScope {
     // handles for the test harness (cage)
     property alias feedList: feedView
     property alias historyList: histView
-    property alias searchInput: searchField.input
     property alias historySearchInput: histField.input
 
-    readonly property bool filtering: query.trim() !== "" || appFilter !== ""
-    function matches(app, appName, title, text, sub) {
-        if (appFilter !== "" && app !== appFilter) return false
-        const q = query.trim().toLowerCase()
-        return q === "" || [appName, title, text, sub].join(" ").toLowerCase().indexOf(q) >= 0
-    }
+    readonly property bool filtering: appFilter !== ""
+    function matches(app) { return appFilter === "" || app === appFilter }
     function openRules(app, name) { rulesApp = app || ""; rulesAppName = name || ""; store.loadRules(); mode = "rules" }
     function back() { if (lightbox !== "") lightbox = ""; else mode = "list" }
     onModeChanged: { if (mode === "history") store.loadHistory(""); else if (mode === "rules") store.loadRules() }
@@ -102,7 +96,7 @@ FocusScope {
         Keys.onEscapePressed: event => {
             if (pn.lightbox !== "") pn.lightbox = ""
             else if (pn.mode !== "list") pn.mode = "list"
-            else if (pn.query !== "" || pn.appFilter !== "") { searchField.input.text = ""; pn.appFilter = "" }
+            else if (pn.appFilter !== "") pn.appFilter = ""
             else event.accepted = false
         }
 
@@ -119,8 +113,8 @@ FocusScope {
                     id: phoneGlyph
                     visible: pn.mode === "list"
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: 38
-                    Layout.preferredHeight: 56
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 58
                     readonly property int b: pn.store.battery
                     Rectangle {  // the body
                         anchors.fill: parent
@@ -129,12 +123,12 @@ FocusScope {
                         border.width: 1.5
                         border.color: Appearance.colors.colOnSecondaryContainer
                         opacity: pn.store.phoneOnline ? 1 : 0.5
-                        Rectangle { anchors { bottom: parent.bottom; bottomMargin: 3; horizontalCenter: parent.horizontalCenter } width: 12; height: 2; radius: 1; color: Appearance.colors.colOnSecondaryContainer; opacity: 0.8 }
+                        Rectangle { anchors { bottom: parent.bottom; bottomMargin: 3; horizontalCenter: parent.horizontalCenter } width: 10; height: 2; radius: 1; color: Appearance.colors.colOnSecondaryContainer; opacity: 0.8 }
                     }
                     CircularProgress {  // the battery level as a ring around the percentage
                         visible: phoneGlyph.b >= 0
                         anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: -2 }
-                        implicitSize: 28
+                        implicitSize: 24
                         lineWidth: 2
                         value: Math.max(0, Math.min(100, phoneGlyph.b)) / 100
                         colPrimary: pn.store.charging ? "#43a047" : phoneGlyph.b < 20 ? "#ef5350" : Appearance.colors.colOnSecondaryContainer
@@ -144,7 +138,7 @@ FocusScope {
                             id: pctText
                             anchors.centerIn: parent
                             text: phoneGlyph.b
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             font.weight: Font.DemiBold
                             color: Appearance.colors.colOnSecondaryContainer
                         }
@@ -199,35 +193,51 @@ FocusScope {
                             StyledToolTip { text: pn.store.link === "usb" ? qsTr("Linked over USB") : pn.store.link === "relay" ? qsTr("Linked over the internet (relay)") : qsTr("Linked over Wi-Fi"); visible: netHover.hovered }
                             HoverHandler { id: netHover }
                         }
-                        StyledText {
-                            Layout.fillWidth: true
-                            text: !pn.store.connected ? qsTr("NectarLink is not running")
-                                : pn.store.count > 0 ? pn.store.count + (pn.store.count === 1 ? " notification" : " notifications") : qsTr("No notifications")
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colSubtext
-                            elide: Text.ElideRight
-                        }
+                        Item { Layout.fillWidth: true }
                     }
                 }
-                IconBtn { visible: pn.mode === "list" && pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
-                IconBtn { visible: pn.mode === "list" && pn.store.connected; symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
-                IconBtn { visible: pn.mode === "list"; symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
-                IconBtn { id: clearAllBtn; visible: pn.mode === "list" && pn.store.count > 0; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
                 IconBtn { id: clearHistBtn; visible: pn.mode === "history" && pn.store.historyTotal > 0; symbol: "delete"; tip: qsTr("Clear history"); onClicked: pn.store.post("history/clear") }
             }
 
             // ---- list: search, app chips, the feed ----
-            Field {
-                id: searchField
-                visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
-                placeholder: qsTr("Filter by app, title or text…")
-                onEdited: text => pn.query = text
+            // ---- quick actions (the Home page tiles of NectarLink, icons only) ----
+            RowLayout {
+                visible: pn.mode === "list" && pn.store.connected
+                Layout.fillWidth: true
+                spacing: 6
+                component QuickBtn: RippleButton {
+                    id: qb
+                    property string symbol
+                    property string tip
+                    implicitWidth: 36; implicitHeight: 36
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: Appearance.colors.colLayer2
+                    colBackgroundHover: Appearance.colors.colLayer2Hover
+                    enabled: pn.store.phoneOnline
+                    contentItem: MaterialSymbol {
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qb.symbol
+                        iconSize: Appearance.font.pixelSize.larger
+                        color: Appearance.colors.colOnLayer2
+                        opacity: qb.enabled ? 1 : 0.4
+                    }
+                    StyledToolTip { text: qb.tip; visible: qb.hovered }
+                }
+                QuickBtn { symbol: "screen_share"; tip: qsTr("Mirror screen"); onClicked: pn.store.quick("mirror") }
+                QuickBtn { symbol: "send"; tip: qsTr("Send files"); onClicked: pn.store.quick("send-files") }
+                QuickBtn { symbol: "content_paste_go"; tip: qsTr("Send clipboard"); onClicked: pn.store.quick("send-clipboard") }
+                QuickBtn { symbol: "notifications_active"; tip: qsTr("Find phone"); onClicked: pn.store.quick("ring") }
+                Item { Layout.fillWidth: true }
+                IconBtn { visible: pn.mode === "list" && pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
+                IconBtn { visible: pn.mode === "list" && pn.store.connected; symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
+                IconBtn { visible: pn.mode === "list"; symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
+                IconBtn { id: clearAllBtn; visible: pn.mode === "list" && pn.store.count > 0; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
             }
             Flow {
-                visible: pn.mode === "list" && pn.store.appList.length > 1
+                visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
                 Layout.fillWidth: true
                 spacing: 4
-                Chip { label: qsTr("All"); active: pn.appFilter === ""; onClicked: pn.appFilter = "" }
+                Chip { label: qsTr("All") + " · " + pn.store.count; active: pn.appFilter === ""; onClicked: pn.appFilter = "" }
                 Repeater {
                     model: pn.store.appList
                     delegate: Chip {
@@ -267,7 +277,7 @@ FocusScope {
                 // the app's own NotificationItem is the delegate (its roles are filled from the model), on the panel's own background
                 delegate: NotificationItem {
                     id: ni
-                    readonly property bool shown: pn.matches(app, appName, title, text, sub)
+                    readonly property bool shown: pn.matches(app)
                     width: feedView.width
                     visible: shown
                     height: shown ? implicitHeight + 4 : 0

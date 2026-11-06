@@ -65,6 +65,7 @@ Item {
         else if (path === "dismiss-group") removeWhere(r => r.app === o.app && !r.ongoing);
         else if (path === "clear") removeWhere(r => !r.ongoing);
     }
+    function quick(cmd) { Quickshell.execDetached([helper, cmd]); }   // mirror | ring | send-clipboard | send-files
     function copyCode(code) { post("copy-code", { "code": code }); }
     function startNectarLink() { Quickshell.execDetached([helper, "start"]); retry.interval = 1500; retry.restart(); }
 
