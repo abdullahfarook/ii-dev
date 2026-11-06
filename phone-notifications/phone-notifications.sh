@@ -68,7 +68,8 @@ case "${1:-}" in
     elif [ -x "$BIN_APPIMAGE" ]; then setsid nohup "$BIN_APPIMAGE" --minimized >/dev/null 2>&1 < /dev/null &
     fi ;;
   open) # the window stays on the workspace it first opened on; bring it here (then raise it), or start the app
-    pgrep -x nectarlink-desk >/dev/null || "$0" start-window
+    # no window yet (not running, or only in the tray): launching without --minimized starts it / makes the running copy show its window
+    hyprctl clients -j | jq -e '[.[]|select(.class=="nectarlink-desktop")]|length>0' >/dev/null || "$0" start-window
     for _ in $(seq 1 40); do
       addr=$(hyprctl clients -j | jq -r '[.[]|select(.class=="nectarlink-desktop")][0].address // empty')
       [ -n "$addr" ] && break; sleep 0.25

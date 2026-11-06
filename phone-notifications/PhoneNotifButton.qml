@@ -55,5 +55,5 @@ WidgetBase {
         StyledText { id: badgeText; anchors.centerIn: parent; text: nl.count > 99 ? "99+" : nl.count; font.pixelSize: 9; color: Appearance.colors.colOnPrimary }
     }
 
-    panelContent: Component { PhoneNotifPanel { store: nl } }
+    panelContent: Component { PhoneNotifPanel { store: nl; onCloseRequested: root.close() } }
 }

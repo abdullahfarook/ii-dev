@@ -12,6 +12,7 @@ import "nectar"
 FocusScope {
     id: pn
     required property var store
+    signal closeRequested()
     property string mode: "list"           // list | history | rules
     property string appFilter: ""           // "" = all apps, else a package name
     property string rulesApp: ""            // rules view opened from a card's "...": only that app
@@ -115,7 +116,7 @@ FocusScope {
                     Layout.alignment: Qt.AlignVCenter
                     Layout.preferredWidth: 30
                     Layout.preferredHeight: 58
-                    readonly property int b: pn.store.battery
+                    readonly property int b: (pn.store.phoneOnline ? pn.store.battery : -1)
                     Rectangle {  // the body
                         anchors.fill: parent
                         radius: 8
@@ -143,7 +144,7 @@ FocusScope {
                             color: Appearance.colors.colOnSecondaryContainer
                         }
                     }
-                    MaterialSymbol { visible: phoneGlyph.b < 0; anchors.centerIn: parent; text: "smartphone"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnSecondaryContainer }
+                    MaterialSymbol { visible: phoneGlyph.b < 0; anchors.centerIn: parent; text: pn.store.phoneOnline ? "smartphone" : "wifi_off"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnSecondaryContainer }
                     StyledToolTip { text: phoneGlyph.b >= 0 ? (pn.store.charging ? qsTr("Battery %1%, charging").arg(phoneGlyph.b) : qsTr("Battery %1%").arg(phoneGlyph.b)) : qsTr("Phone"); visible: glyphHover.hovered }
                     HoverHandler { id: glyphHover }
                 }
@@ -223,7 +224,7 @@ FocusScope {
                 Item { Layout.fillWidth: true }
                 IconBtn { visible: pn.store.historyEnabled && pn.store.historyCount > 0; symbol: "history"; tip: qsTr("Notification history (last 24 hours)"); onClicked: pn.mode = "history" }
                 IconBtn { symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
-                IconBtn { symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
+                IconBtn { symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: { Quickshell.execDetached([pn.store.helper, "open"]); pn.closeRequested() } }
             }
             Rectangle { visible: pn.mode === "list" && pn.store.connected; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colOutlineVariant }
             RowLayout {
