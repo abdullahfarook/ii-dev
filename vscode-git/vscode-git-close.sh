@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # SUPER+Q: hides the git panel / the AI sidebar / the console panel / the dankmail window instead of closing them (they keep running); closes any other window as usual.
+# tell the lone-SUPER "toggle overview on release" shortcut another key was pressed, or releasing SUPER opens the overview
+hyprctl dispatch 'hl.dsp.global("quickshell:searchToggleReleaseInterrupt")' >/dev/null
 active=$(hyprctl activewindow -j)
 if jq -e '.title | test("⎇")' >/dev/null <<<"$active"; then
     exec "$HOME/.config/hypr/custom/vscode-git-hide.sh" force
