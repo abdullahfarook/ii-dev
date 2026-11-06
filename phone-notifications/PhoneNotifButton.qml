@@ -15,6 +15,7 @@ WidgetBase {
     id: root
     iconName: "smartphone"
     iconSize: 17                        // tall glyph: height matches globe and cube
+    implicitWidth: 24                   // narrow glyph: tighter button so the gap to its neighbours matches the other icons
     panelId: "phone-notifications"
     iconOpacity: nl.connected && nl.phoneOnline ? 1 : 0.4
 
