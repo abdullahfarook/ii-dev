@@ -225,7 +225,7 @@ FocusScope {
                 IconBtn { symbol: "tune"; tip: qsTr("App rules"); onClicked: pn.openRules("", "") }
                 IconBtn { symbol: "open_in_new"; tip: qsTr("Open NectarLink"); onClicked: Quickshell.execDetached([pn.store.helper, "open"]) }
             }
-            Rectangle { visible: pn.mode === "list" && pn.store.connected; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colLayer0Border; opacity: 0.6 }
+            Rectangle { visible: pn.mode === "list" && pn.store.connected; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colOutlineVariant }
             RowLayout {
                 visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
                 Layout.fillWidth: true
