@@ -268,7 +268,7 @@ FocusScope {
                 visible: pn.mode === "list"
                 animateAppearance: false
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.fillHeight: !(count === 0 || (pn.filtering && contentHeight < 1))   // empty: give all the room to the centred empty state
                 clip: true
                 spacing: 0
                 model: pn.store.feed
@@ -294,17 +294,48 @@ FocusScope {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 ColumnLayout {
                     anchors.centerIn: parent
+                    width: Math.min(parent.width - 32, 420)
                     spacing: 10
-                    MaterialSymbol { Layout.alignment: Qt.AlignHCenter; text: !pn.store.connected ? "phonelink_off" : "notifications_off"; iconSize: 44; color: Appearance.colors.colSubtext }
+                    MaterialSymbol { Layout.alignment: Qt.AlignHCenter; text: !pn.store.connected ? "phonelink_off" : !pn.store.phoneOnline ? "phonelink_off" : "notifications_off"; iconSize: 48; color: Appearance.colors.colSubtext }
                     StyledText {
                         Layout.alignment: Qt.AlignHCenter
                         text: !pn.store.connected ? qsTr("NectarLink is not running")
-                            : !pn.store.phoneOnline ? qsTr("Connect your phone to see notifications")
+                            : !pn.store.phoneOnline ? qsTr("Phone not connected")
                             : pn.filtering && feedView.count > 0 ? qsTr("Nothing matches")
                             : qsTr("No notifications")
+                        font.pixelSize: Appearance.font.pixelSize.larger
+                        font.weight: Font.Medium
+                        color: Appearance.colors.colOnLayer2
+                    }
+                    StyledText {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: !pn.store.connected ? qsTr("The NectarLink app isn't reachable, so phone notifications can't be shown.")
+                            : !pn.store.phoneOnline ? qsTr("Connect your phone to see its notifications here.")
+                            : pn.filtering && feedView.count > 0 ? qsTr("Try a different search.")
+                            : qsTr("New notifications from your phone will appear here.")
+                        font.pixelSize: Appearance.font.pixelSize.small
                         color: Appearance.colors.colSubtext
                     }
-                    Chip { visible: !pn.store.connected; Layout.alignment: Qt.AlignHCenter; label: qsTr("Start NectarLink"); active: true; onClicked: pn.store.startNectarLink() }
+                    RippleButton {
+                        visible: !pn.store.connected
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 6
+                        implicitWidth: 160; implicitHeight: 40
+                        buttonRadius: Appearance.rounding.full
+                        colBackground: Appearance.colors.colPrimary
+                        colBackgroundHover: Appearance.colors.colPrimaryHover
+                        onClicked: pn.store.startNectarLink()
+                        contentItem: RowLayout {
+                            spacing: 6
+                            Item { Layout.fillWidth: true }
+                            MaterialSymbol { text: "play_arrow"; iconSize: Appearance.font.pixelSize.larger; color: Appearance.colors.colOnPrimary }
+                            StyledText { text: qsTr("Start NectarLink"); color: Appearance.colors.colOnPrimary }
+                            Item { Layout.fillWidth: true }
+                        }
+                    }
                 }
             }
 
