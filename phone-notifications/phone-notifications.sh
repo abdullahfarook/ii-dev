@@ -5,6 +5,7 @@
 #   phone-notifications.sh history [QUERY]  dismissed notifications of the last 24 h (optionally filtered)
 #   phone-notifications.sh rules            per-app rules and the history switch
 #   phone-notifications.sh post PATH [JSON] POST to /v1/notifications/PATH
+#   phone-notifications.sh theme            NectarLink's theme (settings, wallpaper colors)
 #   phone-notifications.sh devices          paired phones (battery, online)
 #   phone-notifications.sh start            start NectarLink in the tray (no window) if it is not running
 #   phone-notifications.sh copy TEXT        copy text to the clipboard
@@ -39,6 +40,7 @@ case "${1:-}" in
   history) api GET "/v1/notifications/history?q=$(enc "${2:-}")" ;;
   rules) api GET "/v1/notifications/rules" ;;
   devices) api GET "/v1/devices" ;;
+  theme) api GET "/v1/notifications/theme" ;;
   post) body="${3:-}"; [ -n "$body" ] || body="{}"; api POST "/v1/notifications/${2#/}" "$body" ;;
   copy) printf '%s' "${2:-}" | wl-copy ;;
   start)

@@ -1,23 +1,23 @@
 # Phone notifications widget
 
-Bar button (phone icon + notification count) and a left side panel with everything NectarLink's Notifications section does:
+Bar button (phone icon + notification count) and a left side panel that **is** NectarLink's Notifications section: the same QML (`nectar/`, copied from the app) with the app's own theme (read from its API, so the wallpaper colors match), fonts, cards, sheets and spacing. It does everything the section does:
 
 - live feed: app icon, app · sub · time, title, text, picture (click to enlarge), Live Updates (badge, progress, timer), grouping by app
   (`+N more` / `Show less` / `Clear N`), WhatsApp conversation replies shown under the card
 - reply (inline box, Enter sends), the app's own buttons (`Mark as read`, `Interested`, ...), `Copy code` for one-time codes
 - dismiss, `Clear all`, Undo bar, `ongoing` notifications can't be dismissed
-- History (last 24 h, search, clear), per-app rules (Show / Quiet / Hidden, also from a card's `...`), phone name · battery · link status
+- History sheet (last 24 h, search, clear), per-app options sheet from a card's `...` (Show / No pop-ups / Hide), all apps' rules (right-click menu > App rules), picture preview sheet, click a card to open the phone app in a window (when NectarLink says app windows work)
 - states: NectarLink not running (with a Start button), phone offline, no notifications
 
 Needs NectarLink with the notifications API: see `../nectarlink-api/`. Panel behavior comes from `../widget-base/` (`WidgetBase.qml`).
 
 | File | What |
 |---|---|
-| `PhoneNotifButton.qml` | Bar button on `WidgetBase`: icon, badge, right-click menu (Reconnect, history on/off); `count` feeds the bar slot |
-| `PhoneNotifStore.qml` | No UI: feed (a long poll that returns the moment something changes), phone status, history, rules, actions, instant removal on dismiss |
-| `PhoneNotifPanel.qml` | Panel content: header, Undo bar, feed list, history, rules, picture preview |
-| `PhoneNotifCard.qml` / `PhoneNotifHistoryRow.qml` / `PhoneNotifRuleRow.qml` | List rows |
-| `phone-notifications.sh` | Helper that talks to the API (`feed`, `history`, `rules`, `post`, `devices`, `start`) |
+| `PhoneNotifButton.qml` | Bar button on `WidgetBase`: icon, badge, right-click menu (App rules, Open NectarLink, Reconnect, history on/off); `count` feeds the bar slot |
+| `PhoneNotifStore.qml` | No UI: feed (a long poll that returns the moment something changes), NectarLink's theme, phone status, history, rules, the actions the cards call, instant removal on dismiss |
+| `PhoneNotifPanel.qml` | Panel content drawn like the app's Home notifications card: header, Undo bar, list of `NotificationItem`, History / app options / rules / picture sheets |
+| `nectar/` | NectarLink's own QML (Theme, Tokens, Icons, Txt, Button, IconButton, NotificationItem, HistoryItem, Sheet, Segmented, ...), see `nectar/README.md` for the few changes |
+| `phone-notifications.sh` | Helper that talks to the API (`feed`, `history`, `rules`, `theme`, `post`, `devices`, `start`, `open`) |
 | `bar-slot.py` | Adds the bar slot (shown on hover, and always while there are notifications), the `phoneNotif` switch in Settings > Bar and the Config defaults |
 | `test/` | Isolated GUI test, see below |
 

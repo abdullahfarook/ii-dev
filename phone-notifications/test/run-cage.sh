@@ -11,7 +11,7 @@ export XDG_RUNTIME_DIR=/run/user/1000/qtcage; mkdir -p "$XDG_RUNTIME_DIR" "$W"; 
 if [ "${1:-}" = stop ]; then pkill -f "cage -- qs -p $W/qscfg" || true; pkill -f "mock_ap[i].py" || true; exit 0; fi
 C="$W/qscfg"; rm -rf "$C"; mkdir -p "$C"
 for e in "$HOME"/.config/quickshell/ii/*; do n=$(basename "$e"); [ "$n" = shell.qml ] || ln -s "$e" "$C/$n"; done
-for f in PhoneNotifStore PhoneNotifPanel PhoneNotifCard PhoneNotifHistoryRow PhoneNotifRuleRow; do cp "$HERE/../$f.qml" "$C/$f.qml"; done
+for f in PhoneNotifStore PhoneNotifPanel; do cp "$HERE/../$f.qml" "$C/$f.qml"; done; cp -r "$HERE/../nectar" "$C/nectar"
 cp "$HERE/harness-shell.qml" "$C/shell.qml"
 ENVV=()
 if [ "${1:-}" = mock ]; then

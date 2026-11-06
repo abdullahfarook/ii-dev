@@ -1,3 +1,16 @@
+diff --git a/desktop/app/src/bridge/app.rs b/desktop/app/src/bridge/app.rs
+index faefe4b..90212fd 100644
+--- a/desktop/app/src/bridge/app.rs
++++ b/desktop/app/src/bridge/app.rs
+@@ -1081,7 +1081,7 @@ fn refresh_wallpaper_colors(qt: CxxQtThread<qobject::AppController>) {
+     }
+ }
+ 
+-fn phone_colors_json(devices: &[crate::state::DeviceView]) -> String {
++pub(crate) fn phone_colors_json(devices: &[crate::state::DeviceView]) -> String {
+     // One entry per name. When a phone was paired again (reinstalled, reset), an
+     // old entry can share its name: the connected, most recently paired one
+     // speaks for it, so its live colors (wallpaper, or the artwork playing) win.
 diff --git a/desktop/app/src/bridge/notifications.rs b/desktop/app/src/bridge/notifications.rs
 index 40818fe..7ad432c 100644
 --- a/desktop/app/src/bridge/notifications.rs
@@ -320,10 +333,10 @@ index 94cb914..f6b0c48 100644
      let (Ok(device), Some(node)) = (device.parse::<DeviceId>(), core_host::node()) else { return };
 diff --git a/desktop/app/src/notifications_api.rs b/desktop/app/src/notifications_api.rs
 new file mode 100644
-index 0000000..4cb5ae1
+index 0000000..807c9eb
 --- /dev/null
 +++ b/desktop/app/src/notifications_api.rs
-@@ -0,0 +1,505 @@
+@@ -0,0 +1,555 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +//! `/v1/notifications/*` of the local automation API (see `docs/api.md`):
 +//! everything the Notifications section of the app does, for other local
@@ -455,14 +468,31 @@ index 0000000..4cb5ae1
 +
 +/// The feed: rows, the count the app shows, Undo and the history switch.
 +fn feed(device: Option<DeviceId>) -> Value {
-+    let (rows, undo, history, online) = core_host::host().hub.read(|s: &AppState| {
-+        let online: HashMap<String, bool> = s
-+            .devices
-+            .iter()
-+            .map(|d| (d.id.to_string(), matches!(d.link, LinkState::Online { .. })))
-+            .collect();
-+        (build_rows(s), s.last_dismissed_label.clone(), s.history_enabled, online)
-+    });
++    let (rows, undo, history, online, history_count, can_open_app) =
++        core_host::host().hub.read(|s: &AppState| {
++            let online: HashMap<String, bool> = s
++                .devices
++                .iter()
++                .map(|d| (d.id.to_string(), matches!(d.link, LinkState::Online { .. })))
++                .collect();
++            let history_count =
++                s.history.iter().filter(|h| s.app_rule(&h.notification.app) != AppRule::Hidden).count();
++            // Clicking a card opens the phone's app in a window of its own, when the app says that works for this phone.
++            let can_open_app = s.devices.iter().filter(|d| device.is_none_or(|id| d.id == id)).any(|d| {
++                matches!(
++                    s.matrices.get(&d.id).and_then(|m| m.state("mirroring.app_windows")),
++                    Some(nectarlink_core::FeatureState::Available)
++                )
++            });
++            (
++                build_rows(s),
++                s.last_dismissed_label.clone(),
++                s.history_enabled,
++                online,
++                history_count,
++                can_open_app,
++            )
++        });
 +    let rows: Vec<&Row> = rows.iter().filter(|r| device.is_none_or(|d| r.view.device == d)).collect();
 +    // Like the app: each group counts once for all its members.
 +    let count: i32 = rows.iter().filter(|r| r.group_index == 0).map(|r| r.group_count).sum();
@@ -472,6 +502,8 @@ index 0000000..4cb5ae1
 +        "count": count,
 +        "undoLabel": undo,
 +        "historyEnabled": history,
++        "historyCount": history_count,
++        "canOpenApp": can_open_app,
 +        "online": online,
 +        "items": rows.iter().map(|r| row_json(r)).collect::<Vec<_>>(),
 +    })
@@ -565,6 +597,36 @@ index 0000000..4cb5ae1
 +    })
 +}
 +
++/// What a tool needs to paint like the app: the theme settings and the color schemes the app derives
++/// from the wallpaper and from paired phones (the same JSON its own Theme reads).
++async fn theme() -> Value {
++    #[cfg(not(test))]
++    {
++        let settings = crate::settings::Settings::load(&core_host::host().data_dir);
++        let wallpaper = tokio::task::spawn_blocking(|| {
++            crate::win::wallpaper::seed().map(|seed| crate::palette::scheme_json(seed).to_string())
++        })
++        .await
++        .ok()
++        .flatten();
++        let phones = core_host::host().hub.read(|s| crate::bridge::app::phone_colors_json(&s.devices));
++        json!({
++            "ok": true,
++            "theme": serde_json::to_value(settings.theme).unwrap_or(Value::Null),
++            "seed": settings.seed,
++            "colorMode": serde_json::to_value(settings.color_mode).unwrap_or(Value::Null),
++            "amoled": settings.amoled,
++            "systemDark": crate::win::system_dark(),
++            "wallpaperColors": wallpaper.unwrap_or_default(),
++            "phoneColors": phones,
++        })
++    }
++    #[cfg(test)]
++    {
++        json!({ "ok": true })
++    }
++}
++
 +#[derive(Debug, Default, Deserialize)]
 +struct ActionPayload {
 +    #[serde(default)]
@@ -639,6 +701,7 @@ index 0000000..4cb5ae1
 +        }
 +        ("GET", "/history") => (200, "OK", history(query)),
 +        ("GET", "/rules") => (200, "OK", rules()),
++        ("GET", "/theme") => (200, "OK", theme().await),
 +        ("POST", "/action") => match parse::<ActionPayload>(body) {
 +            Ok(p) => action(p),
 +            Err(e) => e,
@@ -830,10 +893,10 @@ index 0000000..4cb5ae1
 +    }
 +}
 diff --git a/docs/api.md b/docs/api.md
-index b24267b..262fea3 100644
+index b24267b..c42902b 100644
 --- a/docs/api.md
 +++ b/docs/api.md
-@@ -249,6 +249,55 @@ separated by newlines) or the link.
+@@ -249,6 +249,57 @@ separated by newlines) or the link.
  
  ---
  
@@ -846,7 +909,7 @@ index b24267b..262fea3 100644
 +
 +```json
 +{
-+  "ok": true, "rev": 42, "count": 3, "undoLabel": "Dismissed from WhatsApp", "historyEnabled": true,
++  "ok": true, "rev": 42, "count": 3, "undoLabel": "Dismissed from WhatsApp", "historyEnabled": true, "historyCount": 25, "canOpenApp": false,
 +  "online": { "<device id>": true },
 +  "items": [{
 +    "deviceId": "a1b2c3...", "deviceName": "Pixel 9 Pro", "key": "0|com.whatsapp|1|null|10123",
@@ -862,7 +925,8 @@ index b24267b..262fea3 100644
 +
 +`rev` goes up with every change. Pass `since=<rev>&wait=<seconds>` (at most 55) to wait for news: the call returns as soon
 +as `rev` changes, or after `wait` seconds with the same feed. `count` is what the app's header shows (each group counts all
-+its members). Hidden apps are left out. `iconUrl` and `imageUrl` are `file://` URLs on this PC.
++its members). Hidden apps are left out. `historyCount` is how many dismissed notifications the history holds; `canOpenApp` says
++whether `open-app` works for the phone (the app's `mirroring.app_windows` feature is available). `iconUrl` and `imageUrl` are `file://` URLs on this PC.
 +
 +| Request | Body | Does |
 +|---|---|---|
@@ -878,6 +942,7 @@ index b24267b..262fea3 100644
 +| `GET /v1/notifications/rules` | | `{ "historyEnabled", "apps": [{ "app", "name", "icon", "rule" }] }` |
 +| `POST /v1/notifications/rules` | `{ "app", "rule": "show"\|"quiet"\|"hidden" }` and/or `{ "historyEnabled" }` | Sets an app's rule, and/or turns history on or off. |
 +| `POST /v1/notifications/copy-code` | `{ "code" }` | Copies a one-time code to the PC clipboard. |
++| `GET /v1/notifications/theme` | | The app's look: `{ theme, seed, colorMode, amoled, systemDark, wallpaperColors, phoneColors }` (the JSON its own Theme reads), so a tool can paint like it. |
 +| `POST /v1/notifications/open-app` | `{ "app", "appName"?, "device"? }` | Opens the phone's app in a window on this PC (app windows). |
 +
 +`device` defaults to the notification's phone, or else the first online phone. Errors: `400` with `invalid_json`,

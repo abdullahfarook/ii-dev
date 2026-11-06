@@ -37,6 +37,7 @@ WidgetBase {
                 StyledText { text: parent.parent.label; color: Appearance.colors.colOnLayer2 }
             }
         }
+        Entry { sym: "tune"; label: "App rules"; onClicked: { nl.pendingSheet = "rules"; root.closeMenu(); root.open = true } }
         Entry { sym: "open_in_new"; label: "Open NectarLink"; onClicked: { Quickshell.execDetached([nl.helper, "open"]); root.closeMenu() } }
         Entry { sym: "refresh"; label: "Reconnect"; onClicked: { nl.startNectarLink(); nl.poll(); root.closeMenu() } }
         Entry { visible: nl.connected; sym: nl.historyEnabled ? "history_toggle_off" : "history"; label: nl.historyEnabled ? "Turn history off" : "Turn history on"; onClicked: { nl.setHistoryEnabled(!nl.historyEnabled); root.closeMenu() } }

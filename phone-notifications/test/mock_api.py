@@ -32,7 +32,7 @@ def feed():
             items+= [copy.deepcopy(e) for e in EXTRA]
     vis=[i for i in items if STATE["rules"].get(i["app"],"show")!="hidden"]
     count=sum(i["groupCount"] for i in vis if i["groupIndex"]==0)
-    return dict(ok=True,rev=STATE["rev"],count=count,undoLabel=STATE["undo"],historyEnabled=True,online={DEV:True},items=vis)
+    return dict(ok=True,rev=STATE["rev"],count=count,undoLabel=STATE["undo"],historyEnabled=True,historyCount=6,online={DEV:True},items=vis)
 def bump():
     with LOCK: STATE["rev"]+=1; LOCK.notify_all()
 class H(BaseHTTPRequestHandler):
@@ -51,6 +51,8 @@ class H(BaseHTTPRequestHandler):
             h=[dict(deviceId=DEV,deviceName="Mock Phone",key="h%d"%i,app="com.whatsapp",appName="WhatsApp",title="Old %d"%i,text="dismissed message %d"%i,sub="",when=now-3600000*(i+1),removedAt=now-1000*i,iconUrl="") for i in range(6)]
             h=[x for x in h if not qq or qq in (x["title"]+x["text"]).lower()]
             return self.send(dict(ok=True,rev=STATE["rev"],enabled=True,total=6,items=h))
+        if u.path=="/v1/notifications/theme":
+            return self.send(dict(ok=True,theme="bloom",seed="blue",colorMode="dark",amoled=False,systemDark=True,wallpaperColors="",phoneColors=""))
         if u.path=="/v1/notifications/rules":
             apps=[dict(app=a,name=nm,icon="",rule=STATE["rules"].get(a,"show")) for a,nm in [("com.google","Google"),("com.telegram","Telegram"),("com.whatsapp","WhatsApp")]]
             return self.send(dict(ok=True,historyEnabled=True,apps=apps))

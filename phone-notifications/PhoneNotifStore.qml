@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import "nectar"
 
 // Phone notifications (NectarLink): bar button with the notification count + a side panel with everything NectarLink's
 // Notifications section does: live feed with groups and Live Updates, reply / actions / Copy code, dismiss, Clear all with
@@ -29,6 +30,9 @@ Item {
     property var online: ({})
     property var rulesApps: []
     property int historyTotal: 0
+    property int historyCount: 0        // dismissed notifications kept (shows the History button)
+    property string pendingSheet: ""   // set by the right-click menu: a Sheet the panel opens when it shows ("rules")
+    property bool canOpenApp: false     // click a card to open the phone app in a window on this PC (NectarLink's app windows)
     property string historyQuery: ""
 
     ListModel { id: feedModel }
@@ -40,6 +44,18 @@ Item {
         optimistic(path, obj || {});
         Quickshell.execDetached([helper, "post", path, JSON.stringify(obj || {})]);
     }
+    // what the ported NotificationItem calls (NectarLink's NotificationList API)
+    function runAction(deviceId, key, action) { post("action", { "device": deviceId, "key": key, "action": action }); }
+    function reply(deviceId, key, action, text) {
+        const t = (text || "").trim();
+        if (t.length > 0) post("action", { "device": deviceId, "key": key, "action": action, "reply": t });
+    }
+    function dismiss(deviceId, key) { post("dismiss", { "device": deviceId, "key": key }); }
+    function dismissGroup(deviceId, app) { post("dismiss-group", { "device": deviceId, "app": app }); }
+    function toggleGroup(app) { post("toggle-group", { "app": app }); }
+    function ruleOf(app) { const a = rulesApps.find(x => x.app === app); return a ? a.rule : "show"; }
+    function openApp(app, name) { post("open-app", { "app": app, "appName": name }); }
+
     // Rows go at once when dismissed; the next feed (a moment later) confirms or corrects it.
     function removeWhere(test) { for (let i = feedModel.count - 1; i >= 0; i--) if (test(feedModel.get(i))) feedModel.remove(i); }
     function optimistic(path, o) {
@@ -56,7 +72,7 @@ Item {
             "uid": it.deviceId + "\u0001" + it.key, "deviceId": it.deviceId, "key": it.key, "app": it.app, "appName": it.appName,
             "title": it.title, "text": it.text, "sub": it.sub, "when": it.when, "iconUrl": it.iconUrl, "imageUrl": it.imageUrl,
             "actions": JSON.stringify(it.actions || []), "replyAction": it.replyAction, "replyLabel": it.replyLabel,
-            "ongoing": it.ongoing, "replies": JSON.stringify(it.replies || []), "otpCode": it.otpCode,
+            "ongoing": it.ongoing, "silent": it.silent === true, "replies": JSON.stringify(it.replies || []), "otpCode": it.otpCode,
             "live": it.live ? JSON.stringify(it.live) : "", "groupCount": it.groupCount, "groupIndex": it.groupIndex,
             "groupExpanded": it.groupExpanded, "groupSummary": it.groupSummary
         };
@@ -77,6 +93,8 @@ Item {
         rev = j.rev;
         count = j.count;
         undoLabel = j.undoLabel || "";
+        historyCount = j.historyCount || 0;
+        canOpenApp = j.canOpenApp === true;
         historyEnabled = j.historyEnabled;
         online = j.online || ({});
         phoneOnline = Object.values(online).some(v => v);
@@ -117,6 +135,18 @@ Item {
     Timer { id: retry; interval: 10; onTriggered: root.poll() }
     Component.onCompleted: { startupCheck.running = true; poll(); refreshPhone(); }
     Process { id: startupCheck; command: [root.helper, "start"] }   // NectarLink in the tray, no window, if it is not running
+
+    // ---- NectarLink's own theme (settings + wallpaper colors), so the panel looks like the app ----
+    function refreshTheme() { if (!themeProc.running) themeProc.running = true; }
+    Process {
+        id: themeProc
+        command: [root.helper, "theme"]
+        stdout: StdioCollector {
+            onStreamFinished: { try { const j = JSON.parse(text); if (j.ok) Theme.apply(j); } catch (e) {} }
+        }
+    }
+    Timer { interval: 300000; repeat: true; running: root.connected; onTriggered: root.refreshTheme() }
+    onConnectedChanged: if (connected) { refreshTheme(); loadRules(); }
 
     // ---- phone status (battery, link) ----
     function refreshPhone() { if (!devProc.running) devProc.running = true; }
@@ -177,5 +207,5 @@ Item {
     function setHistoryEnabled(on) { post("rules", { "historyEnabled": on }); historyEnabled = on; }
 
 
-    function onOpened() { clock++; refreshPhone(); poll(); }
+    function onOpened() { clock++; refreshPhone(); poll(); refreshTheme(); loadRules(); }
 }
