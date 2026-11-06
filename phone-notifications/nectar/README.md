@@ -6,6 +6,6 @@ so the widget draws the notification section exactly like the app. Changes, kept
 
 - `import app.nectarlink` removed (the Rust singletons do not exist here);
 - `Theme.qml`: `Preferences`/`AppController`/`MediaList` replaced by `cfg`, filled from NectarLink's `GET /v1/theme` through `Theme.apply()`;
-- `NotificationItem.qml`: `NotificationList.x()` calls go to `item.list.x()` (the store); `replyInput` alias for the test harness.
+- `NotificationItem.qml`: `NotificationList.x()` calls go to `item.list.x()` (the store); `replyInput` alias for the test harness; tighter padding for the narrow panel (card padding 12 -> 6, icon and text 12 -> 6 px from the top, right margin 84 -> 72, the `...` and dismiss buttons 8 -> 3 px from the top).
 
 `fonts/Figtree.ttf` is the app's UI font (SIL OFL 1.1, see `fonts/OFL-Figtree.txt`).

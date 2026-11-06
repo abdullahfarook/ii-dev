@@ -77,7 +77,7 @@ Item {
     property var list
     property alias replyInput: input   // handle for the test harness
 
-    implicitHeight: content.implicitHeight + 24
+    implicitHeight: content.implicitHeight + 12
     height: implicitHeight
     activeFocusOnTab: item.canOpenApp && !item.replying
     Accessible.role: item.canOpenApp ? Accessible.Button : Accessible.Grouping
@@ -234,7 +234,7 @@ Item {
     // App icon, or its initial when the phone didn't send one.
     Item {
         id: icon
-        x: item.isGroupChild ? 20 : 12; y: 12
+        x: item.isGroupChild ? 14 : 6; y: 6
         width: item.isGroupChild ? 24 : 32; height: item.isGroupChild ? 24 : 32
         Image {
             id: image
@@ -255,10 +255,10 @@ Item {
     Column {
         id: content
         anchors.left: icon.right
-        anchors.leftMargin: 12
+        anchors.leftMargin: 10
         anchors.right: parent.right
-        anchors.rightMargin: 84
-        y: 12
+        anchors.rightMargin: 72
+        y: 6
         spacing: 4
 
         Item {
@@ -518,7 +518,7 @@ Item {
         Flow {
             width: parent.width
             spacing: 6
-            topPadding: 4
+            topPadding: 2
             visible: !item.replying && (item.otpCode.length > 0 || item.replyAction.length > 0 || item.buttons.length > 0)
             Button {
                 visible: item.otpCode.length > 0
@@ -628,7 +628,7 @@ Item {
     IconButton {
         anchors.right: dismiss.visible ? dismiss.left : parent.right
         anchors.rightMargin: dismiss.visible ? 0 : 8
-        y: 8
+        y: 3
         iconPath: Icons.more
         label: qsTr("Options for %1").arg(item.appName)
         // Like Dismiss: always there (for keyboards and screen readers),
@@ -641,7 +641,7 @@ Item {
         id: dismiss
         anchors.right: parent.right
         anchors.rightMargin: 8
-        y: 8
+        y: 3
         iconPath: Icons.close
         visible: !item.ongoing || (item.isGroupLead && !item.groupExpanded && item.groupCount > 1)
         label: item.isGroupLead && !item.groupExpanded

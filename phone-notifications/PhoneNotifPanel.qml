@@ -38,7 +38,7 @@ FocusScope {
 
     Column {
         id: feedColumn
-        anchors { fill: parent; margins: 16 }
+        anchors { fill: parent; margins: 8 }
         spacing: 8
 
         Item {  // header
@@ -233,7 +233,7 @@ FocusScope {
             }
             Flickable {
                 width: parent.width
-                height: Math.min(rulesColumn.height, pn.height - 260)
+                height: Math.min(rulesColumn.height, pn.height - 310)
                 contentHeight: rulesColumn.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -376,7 +376,7 @@ FocusScope {
             }
             Flickable {
                 width: parent.width
-                height: Math.min(historyColumn.height, pn.height - 260)
+                height: Math.min(historyColumn.height, pn.height - 310)
                 contentHeight: historyColumn.height
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
