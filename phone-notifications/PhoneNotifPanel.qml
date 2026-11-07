@@ -135,9 +135,12 @@ FocusScope {
                         colPrimary: pn.store.charging ? "#43a047" : phoneGlyph.b < 20 ? "#ef5350" : Appearance.colors.colOnSecondaryContainer
                         colSecondary: Qt.rgba(1, 1, 1, 0.12)
                         enableAnimation: false
+                        // mirrored so the fill ends at 12 o'clock and drains clockwise; the text is mirrored back
+                        transform: Scale { origin.x: 12; xScale: -1 }
                         StyledText {
                             id: pctText
                             anchors.centerIn: parent
+                            transform: Scale { origin.x: pctText.width / 2; xScale: -1 }
                             text: phoneGlyph.b
                             font.pixelSize: 11
                             font.weight: Font.DemiBold
