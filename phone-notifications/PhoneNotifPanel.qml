@@ -268,6 +268,9 @@ FocusScope {
                 id: feedView
                 visible: pn.mode === "list"
                 animateAppearance: false
+                // StyledListView's transitions are empty when animateAppearance is false; an empty remove
+                // transition leaves removed delegates painted (collapsed group cards overlapped the next card)
+                add: null; addDisplaced: null; remove: null; removeDisplaced: null; displaced: null; move: null; moveDisplaced: null
                 Layout.fillWidth: true
                 Layout.fillHeight: !(count === 0 || (pn.filtering && contentHeight < 1))   // empty: give all the room to the centred empty state
                 clip: true
