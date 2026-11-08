@@ -66,7 +66,13 @@ case "${1:-}" in
     pgrep -f 'Nectarlink.*AppImage' >/dev/null && exit 0
     if [ -x "$BIN_PATCHED" ]; then setsid nohup "$BIN_PATCHED" --minimized >/dev/null 2>&1 < /dev/null &
     elif [ -x "$BIN_APPIMAGE" ]; then setsid nohup "$BIN_APPIMAGE" --minimized >/dev/null 2>&1 < /dev/null &
-    fi ;;
+    fi
+    # the app maps a window even with --minimized (and steals focus): park it on a hidden special workspace; "open" brings it back
+    ( for _ in $(seq 1 60); do
+        addr=$(hyprctl clients -j | jq -r '[.[]|select(.class=="nectarlink-desktop")][0].address // empty')
+        if [ -n "$addr" ]; then hyprctl dispatch "hl.dsp.window.move({ workspace = \"special:nectarlink\", window = \"address:$addr\", follow = false })" >/dev/null; break; fi
+        sleep 0.5
+      done ) >/dev/null 2>&1 < /dev/null & ;;
   open) # the window stays on the workspace it first opened on; bring it here (then raise it), or start the app
     # no window yet (not running, or only in the tray): launching without --minimized starts it / makes the running copy show its window
     hyprctl clients -j | jq -e '[.[]|select(.class=="nectarlink-desktop")]|length>0' >/dev/null || "$0" start-window

@@ -24,3 +24,17 @@ if "nectarlink" not in s:
     open(p, "w").write(s)
 PY
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
+# autostart: start NectarLink hidden (parked on a hidden special workspace, not focused)
+mkdir -p "$HOME/.config/autostart"
+cat > "$HOME/.config/autostart/nectarlink.desktop" <<DESK
+[Desktop Entry]
+Type=Application
+Name=NectarLink
+Comment=Link your Android phone and PC
+Exec=$HOME/.config/hypr/custom/phone-notifications.sh start
+Icon=nectarlink
+Terminal=false
+Categories=Utility;Network;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+DESK
