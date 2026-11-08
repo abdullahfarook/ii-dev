@@ -2,6 +2,19 @@
 # usage: patch.py BarContent.qml (idempotent): hovering the bar's left side no longer slides the icons out inside the bar; a floating grouped tray under the bar shows them instead
 import re, sys
 p = sys.argv[1]; s = open(p).read()
+if "--undo" in sys.argv:   # back to the old inline slide-out (icons expand to the right inside the bar)
+    s = s.replace("open: false\n", "open: iconRow.hot\n")
+    s = re.sub(r"leftTray\.hovered \|\| (?:\w+\.menuOpen === true \|\| )*", "", s)
+    s = s.replace("id: closeTimer; interval: 1000;", "id: closeTimer; interval: 700;", 1)
+    s = re.sub(r"    LeftTray \{ // floating grouped tray under the bar \(zbar-groups\).*?\n    \}\n\n", "", s, flags=re.S)
+    if "zbar-hide-title" not in s:   # hide the window title while the icons slide out
+        t = "                visible: root.useShortenedForm === 0\n            }\n        }\n    }"
+        assert s.count(t) == 1
+        s = s.replace(t, "                visible: root.useShortenedForm === 0\n                opacity: iconRow.hot ? 0 : 1 // hide title while the icons slide out (zbar-hide-title)\n                Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutCubic } }\n            }\n        }\n    }")
+    open(p, "w").write(s)
+    a = p.replace("BarContent.qml", "ActiveWindow.qml"); w = open(a).read()
+    open(a, "w").write(w.replace("            active: false   // zbar-groups: no title tooltip (it covered the tray)\n", ""))
+    print("tray off, inline slide-out back"); sys.exit(0)
 done = "LeftTray {" in s
 # key, button id, label, tray icon, icon size (optical: narrow/tall glyphs smaller so all look the same)
 ENT = [("mail","mailBtn","Mail","mail",20),("teams","teamsBtn","Teams","forum",20),("phoneNotif","phoneBtn","Phone notifications","smartphone",17),

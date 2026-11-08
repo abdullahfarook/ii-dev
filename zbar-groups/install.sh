@@ -4,6 +4,8 @@
 set -euo pipefail
 Q="$HOME/.config/quickshell/ii/modules/ii/bar"; D="$(dirname "$0")"
 B="$HOME/backups/zbar-groups/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$Q/BarContent.qml" "$Q/ActiveWindow.qml" "$B/"; echo "Backed up to $B"
-install -Dm644 "$D/LeftTray.qml" "$Q/LeftTray.qml"
-python3 "$D/patch.py" "$Q/BarContent.qml"
+# TRAY=0 (default, set in ./mode): old behaviour, icons slide out inside the bar. TRAY=1: floating tray.
+TRAY=${TRAY:-$(cat "$D/mode" 2>/dev/null || echo 0)}
+if [ "$TRAY" = 1 ]; then install -Dm644 "$D/LeftTray.qml" "$Q/LeftTray.qml"; python3 "$D/patch.py" "$Q/BarContent.qml"
+else python3 "$D/patch.py" "$Q/BarContent.qml" --undo; fi
 echo "Done. Restart the shell: qs -c ii kill; nohup qs -c ii >/dev/null 2>&1 & disown"
