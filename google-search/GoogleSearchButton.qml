@@ -20,7 +20,7 @@ WidgetBase {
     // Last session (kept in memory only, lost when the shell restarts): restored when the popup opens again
     property string memQuery: ""
     property string memUrl: ""
-    property string keepUrl: "" // tag active: this page stays alive (hidden) in the helper while the panel is closed; cleared when navigating elsewhere
+    property string keepUrl: "" // tag active: this page stays alive (hidden) in the helper while the panel is closed; follows navigation, cleared only by un-tagging
     property int memWidth: 440 // widget width chosen by dragging its right edge (memory only)
     // Suggestion history (recent searches / addresses, newest first): saved to disk so it survives shell restarts.
     // Every bar has its own button, so the popup reloads the file when it opens and saves after each change.
@@ -113,7 +113,7 @@ WidgetBase {
             const url = gq.target.memUrl ?? "";
             if (url !== "") gq.loading = true;
             Quickshell.execDetached({
-                command: url !== "" ? [bin, target.keepUrl === url ? "resume" : "goto", url] : [bin, "show", ""],
+                command: url !== "" ? [bin, target.keepUrl !== "" ? "resume" : "goto", url] : [bin, "show", ""],
                 environment: { GSEARCH_BG: String(Appearance.m3colors.m3surfaceContainer), GSEARCH_THUMB: String(Appearance.colors.colOutlineVariant), GSEARCH_THUMB_HOVER: String(Appearance.colors.colOutline) }
             });
         }
@@ -205,7 +205,7 @@ WidgetBase {
                     else if (line.startsWith("nav ")) { const p = line.split(" "); gq.canBack = p[1] === "1"; gq.canForward = p[2] === "1" }
                     else if (line.startsWith("url ")) {
                         gq.target.memUrl = line.slice(4);
-                        if (gq.target.keepUrl !== "" && gq.target.memUrl !== gq.target.keepUrl) gq.target.keepUrl = "" // navigated elsewhere: tag unselected
+                        if (gq.target.keepUrl !== "") gq.target.keepUrl = gq.target.memUrl // tag stays on while navigating: the kept page follows
                     }
                     else if (line === "loading") { gq.loading = true; gq.progress = 0 }
                     else if (line.startsWith("progress ")) gq.progress = Number(line.slice(9)) / 100
