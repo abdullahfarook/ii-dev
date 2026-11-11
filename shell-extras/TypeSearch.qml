@@ -94,6 +94,7 @@ Scope {
                 console.log("typesearch: key", event.key, JSON.stringify(event.text));
                 if (event.key === Qt.Key_Escape) { root.disarm(); return; }
                 const t = event.text;
+                if (event.modifiers & Qt.MetaModifier) return;   // SUPER + key is a shortcut (e.g. SUPER+D), not typing
                 if (t.length > 0 && t >= " " && t !== "\x7f"
                         && !(event.modifiers & (Qt.ControlModifier | Qt.AltModifier))) {
                     root.buffer += t;
