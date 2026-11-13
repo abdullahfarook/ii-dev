@@ -25,29 +25,28 @@ n=$(wc -l <"$list"); i=$(cat "$flag")
 if [ "$1" = prev ]; then i=$(( (i - 1 + n) % n )); else i=$(( (i + 1) % n )); fi
 echo "$i" >"$flag"
 t=$(sed -n "$((i + 1))p" "$list")
+pins="$rt/super-tab-pinned"; touch "$pins"
+cmds=()  # all changes go out in ONE hyprctl --batch call, so they land in one frame (no stepwise jerking)
+while read -r a; do cmds+=("dispatch hl.dsp.window.pin({ action = 'disable', window = 'address:$a' })"); done <"$pins"; : >"$pins"
 if [[ $t == 0x* ]]; then  # a window of a float-mode workspace: focus it and bring it to the front
-    # Hyprland draws a fullscreen window above all others, except pinned windows. So if a sibling is fullscreen, pin
-    # the chosen window (it shows over it, the fullscreen app stays fullscreen); pins of earlier steps are removed first.
-    pins="$rt/super-tab-pinned"; touch "$pins"
-    unpin_all() { while read -r a; do hyprctl dispatch "hl.dsp.window.pin({ action = 'disable', window = 'address:$a' })" >/dev/null; done <"$pins"; : >"$pins"; }
-    unpin_all
     cl=$(hyprctl clients -j)
     ws=$(echo "$cl" | jq -r --arg a "$t" '.[] | select(.address == $a) | .workspace.id')
+    # Hyprland draws a fullscreen window above all others, except pinned windows. So if a sibling is fullscreen, pin
+    # the chosen window (it shows over it, the fullscreen app stays fullscreen).
     if echo "$cl" | jq -e --arg a "$t" --argjson w "$ws" 'any(.[]; .mapped and .workspace.id == $w and .address != $a and .fullscreen > 0)' >/dev/null; then
-        hyprctl dispatch "hl.dsp.window.pin({ action = 'enable', window = 'address:$t' })" >/dev/null
+        cmds+=("dispatch hl.dsp.window.pin({ action = 'enable', window = 'address:$t' })")
         echo "$t" >"$pins"
     fi
-    # going back to the fullscreen app: apps shown over it keep an "allowed over fullscreen" flag, so they would stay
-    # visible. Toggling fullscreen off and on again clears the flag (and brings the app back on top).
-    m=$(echo "$cl" | jq -r --arg a "$t" '.[] | select(.address == $a) | .fullscreen')
+    # going back to the fullscreen app: apps that were shown over it keep an "allowed over fullscreen" flag, so they would
+    # stay visible. Toggling fullscreen off and on again (same batch, so no visible flicker) clears the flag.
+    m=$(echo "$cl" | jq -r --arg a "$t" --argjson w "$ws" '(.[] | select(.address == $a) | .fullscreen) as $f
+        | if $f > 0 and any(.[]; .workspace.id == $w and .address != $a and .allowedOverFullscreen) then $f else 0 end')
     if [ "${m:-0}" -gt 0 ]; then
-        for _ in 1 2; do hyprctl dispatch "hl.dsp.window.fullscreen({ mode = $m, window = 'address:$t' })" >/dev/null; done
+        cmds+=("dispatch hl.dsp.window.fullscreen({ mode = $m, window = 'address:$t' })" "dispatch hl.dsp.window.fullscreen({ mode = $m, window = 'address:$t' })")
     fi
-    hyprctl dispatch "hl.dsp.focus({ window = \"address:$t\" })" >/dev/null
-    hyprctl dispatch "hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$t' })" >/dev/null
+    cmds+=("dispatch hl.dsp.focus({ window = \"address:$t\" })" "dispatch hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:$t' })")
 else
-    touch "$rt/super-tab-pinned"
-    while read -r a; do hyprctl dispatch "hl.dsp.window.pin({ action = 'disable', window = 'address:$a' })" >/dev/null; done <"$rt/super-tab-pinned"; : >"$rt/super-tab-pinned"
-    hyprctl dispatch "hl.dsp.focus({ workspace = \"$t\" })" >/dev/null
+    cmds+=("dispatch hl.dsp.focus({ workspace = \"$t\" })")
 fi
+hyprctl --batch "$(printf '%s ; ' "${cmds[@]}")" >/dev/null
 hyprctl layers | grep -q "quickshell:overview" || qs -c ii ipc call search open
