@@ -33,6 +33,8 @@ match() {
         vgit) echo '(.title|test("⎇"))' ;;
     esac
 }
+# App class of a panel whose popups (hover previews, menus, tooltips) are separate windows: they belong to the panel
+app_class() { case "$1" in teams) echo teams-for-linux ;; esac; }
 now() { date +%s%3N; }
 age() { local f="$R/side-panel-$1-$2"; [ -e "$f" ] && echo $(( $(now) - $(cat "$f") )) || echo 999999; }
 mon_of() { hyprctl monitors -j | jq -r --arg n "special:$1" '.[] | select(.specialWorkspace.name==$n) | .name' | head -1; }
@@ -157,17 +159,19 @@ watch)
         openwindow\>\>*)  # another app's window mapped onto a shown panel's workspace: move it out to the normal workspace
             IFS=, read -r addr ws class title <<<"${line#openwindow>>}"; p=${ws#special:}
             [ "$ws" != "$p" ] && is_panel "$p" || continue
+            [ -n "$(app_class "$p")" ] && [ "$class" = "$(app_class "$p")" ] && continue   # the panel app's own popup
             hyprctl clients -j | jq -e --arg a "0x$addr" ".[] | select(.address == \$a) | select($(match "$p"))" >/dev/null && continue
             dest=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .activeWorkspace.id')
             hyprctl dispatch "hl.dsp.window.move({ workspace = \"$dest\", window = \"address:0x$addr\" })" >/dev/null ;;
         activewindow\>\>*)  # focus moved to another window: close the panel on THAT window's monitor only
             [ "${line#activewindow>>}" = "," ] && continue
             sleep 0.05
-            read -r ws wm < <(hyprctl activewindow -j | jq -r '"\(.workspace.name // "") \(.monitor // -1)"')
+            read -r ws wm wc < <(hyprctl activewindow -j | jq -r '"\(.workspace.name // "") \(.monitor // -1) \(.class // "")"')
             [ -n "$ws" ] || continue
             p=${ws#special:}; is_panel "$p" && [ "$ws" != "$p" ] && continue    # focus is on a panel itself
             m=$(hyprctl monitors -j | jq -r --argjson i "$wm" '.[] | select(.id == $i) | .name')
             [ -n "$m" ] || continue
+            p=$(panel_on "$m"); [ -n "$p" ] && [ -n "$(app_class "$p")" ] && [ "$wc" = "$(app_class "$p")" ] && continue   # the panel app's own popup
             # focus-follows-mouse while the cursor crosses the bar (window below it gets focus): not a reason to close
             read -r cx cy < <(hyprctl cursorpos | tr -d ',')
             hyprctl monitors -j | jq -e --arg m "$m" --argjson x "$cx" --argjson y "$cy" \

@@ -199,7 +199,8 @@ WidgetBase {
         }
         if (msg.id === _htmlReqId) {
             _htmlReqId = -1;
-            if (msg.result && _htmlForViewer) showInViewer(msg.result);
+            if (msg.error && _htmlForViewer) showInViewer({ "subject": "Mail", "text": "Could not load the full message from the server:\n" + msg.error + "\n\nTry again in a moment." });
+            else if (msg.result && _htmlForViewer) showInViewer(msg.result);
             else if (!_htmlForViewer) {
                 if (msg.result && msg.result.html) { const r = {}; r[msg.result.messageId] = msg.result.html; rawHtml = r; }
                 htmlReady = true; htmlGuard.stop();

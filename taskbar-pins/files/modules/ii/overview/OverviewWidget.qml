@@ -257,9 +257,10 @@ Item {
                         hoverEnabled: true
                         onEntered: hovered = true // For hover color change
                         onExited: hovered = false // For hover color change
-                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                         drag.target: parent
                         onPressed: (mouse) => {
+                            if (mouse.button === Qt.RightButton) return
                             root.draggingFromWorkspace = windowData?.workspace.id
                             window.pressed = true
                             window.Drag.active = true
@@ -268,7 +269,8 @@ Item {
                             window.Drag.hotSpot.y = mouse.y
                             // console.log(`[OverviewWindow] Dragging window ${windowData?.address} from position (${window.x}, ${window.y})`)
                         }
-                        onReleased: {
+                        onReleased: (mouse) => {
+                            if (mouse.button === Qt.RightButton) return
                             const targetWorkspace = root.draggingTargetWorkspace
                             window.pressed = false
                             window.Drag.active = false
@@ -293,6 +295,10 @@ Item {
                             if (event.button === Qt.LeftButton) {
                                 GlobalStates.overviewOpen = false
                                 Hyprland.dispatch(`hl.dsp.focus({window = "address:${windowData.address}"})`)
+                                event.accepted = true
+                            } else if (event.button === Qt.RightButton) {
+                                const pt = dragArea.mapToItem(root, event.x, event.y)
+                                root.openWinMenu(windowData, pt.x, pt.y)
                                 event.accepted = true
                             } else if (event.button === Qt.MiddleButton) {
                                 Hyprland.dispatch(`hl.dsp.window.close({window = "address:${windowData.address}"})`)
@@ -376,6 +382,72 @@ Item {
                 }
                 Behavior on bottomRightRadius {
                     animation: Appearance.animation.elementMoveEnter.numberAnimation.createObject(this)
+                }
+            }
+        }
+    }
+
+    // Right-click menu for a window in the overview
+    property var menuWin: null
+    function openWinMenu(w, x, y) { menuWin = w; winMenu.x = x; winMenu.y = y; winMenu.visible = true }
+    function closeWinMenu() { winMenu.visible = false; menuWin = null }
+    function winAction(kind) {
+        const w = menuWin
+        if (!w) return
+        const addr = `address:${w.address}`
+        closeWinMenu()
+        if (kind === "focus") { GlobalStates.overviewOpen = false; Hyprland.dispatch(`hl.dsp.focus({window = "${addr}"})`) }
+        else if (kind === "close") Hyprland.dispatch(`hl.dsp.window.close({window = "${addr}"})`)
+        else if (kind === "stop") Quickshell.execDetached(["kill", "-9", String(w.pid)])
+        else if (kind === "float") Hyprland.dispatch(`hl.dsp.window.float({action = "toggle", window = "${addr}"})`)
+        else if (kind === "fullscreen") { GlobalStates.overviewOpen = false; Hyprland.dispatch(`hl.dsp.focus({window = "${addr}"})`); Hyprland.dispatch(`hl.dsp.window.fullscreen({mode = "fullscreen", action = "toggle"})`) }
+        else if (kind === "pin") {
+            const id = LauncherApps.entryForClass(w.class ?? "")?.id ?? w.class ?? ""
+            if (LauncherApps.pinIndex(id) !== -1) LauncherApps.unpin(id); else LauncherApps.pin(id)
+        }
+    }
+    MouseArea { // click-away catcher
+        visible: winMenu.visible
+        anchors.fill: parent
+        anchors.margins: -5000
+        z: 998
+        acceptedButtons: Qt.AllButtons
+        onPressed: root.closeWinMenu()
+    }
+    Rectangle {
+        id: winMenu
+        visible: false
+        z: 999
+        width: 190
+        height: menuCol.implicitHeight + 8
+        radius: Appearance.rounding.small
+        color: Appearance.m3colors.m3surfaceContainer
+        border.width: 1
+        border.color: Appearance.colors.colOutlineVariant
+        ColumnLayout {
+            id: menuCol
+            anchors { fill: parent; margins: 4 }
+            spacing: 0
+            Repeater {
+                model: [
+                    { k: "focus", t: Translation.tr("Focus"), i: "open_in_new" },
+                    { k: "fullscreen", t: Translation.tr("Fullscreen"), i: "fullscreen" },
+                    { k: "float", t: Translation.tr("Float / Tile"), i: "picture_in_picture" },
+                    { k: "pin", t: Translation.tr("Pin / Unpin app"), i: "push_pin" },
+                    { k: "close", t: Translation.tr("Close"), i: "close" },
+                    { k: "stop", t: Translation.tr("Stop (kill)"), i: "stop_circle" }
+                ]
+                delegate: RippleButton {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 32
+                    buttonRadius: Appearance.rounding.verysmall
+                    onClicked: root.winAction(modelData.k)
+                    contentItem: RowLayout {
+                        spacing: 8
+                        MaterialSymbol { text: modelData.i; iconSize: 18; color: Appearance.colors.colOnLayer1 }
+                        StyledText { Layout.fillWidth: true; text: modelData.t; color: Appearance.colors.colOnLayer1 }
+                    }
                 }
             }
         }
