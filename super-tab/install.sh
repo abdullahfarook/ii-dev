@@ -16,5 +16,8 @@ else:
     s = s.rstrip("\n") + "\n\n" + snippet + "\n"
 open(target, "w").write(s)
 PY
+OV="$HOME/.config/quickshell/ii/modules/ii/overview/OverviewWidget.qml"
+B="$HOME/backups/super-tab/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$OV" "$B/"
+python3 "$REPO/patch-overview.py" "$OV"
 pgrep -f ws-mru-watch.sh >/dev/null || { nohup "$HOME/.config/hypr/custom/ws-mru-watch.sh" >/dev/null 2>&1 & disown; }
 echo "Installed. Hyprland reloads automatically; if not: hyprctl reload"
