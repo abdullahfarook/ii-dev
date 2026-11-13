@@ -30,6 +30,9 @@ Scope {
             root.floating = f;
             root.pendingOn = !!f[ws.name];
             root.pendingId = String(ws.id);
+            // ids of float-mode workspaces, read by super-tab.sh (ALT+Tab cycles windows there)
+            const ids = Object.keys(f).map(n => Hyprland.workspaces.values.find(w => w.name === n)).filter(w => w).map(w => w.id);
+            Quickshell.execDetached(["sh", "-c", "printf '%s\\n' \"$@\" > \"${XDG_RUNTIME_DIR:-/tmp}/float-workspaces\"", "sh"].concat(ids));
             console.log("floatws: workspace", ws.name, root.pendingOn ? "on" : "off");
             clients.running = true;   // apply to the windows already there
             Quickshell.execDetached(["notify-send", "-a", "Hyprland", "-t", "1500",

@@ -248,7 +248,18 @@ Item {
                         }
                     }
 
-                    z: Drag.active ? root.windowDraggingZ : (root.windowZ + windowData?.floating + windowData?.fullscreen * 2)
+                    // focused window: drawn above the others and outlined (ALT+Tab on float-mode workspaces shows which app is picked)
+                    property bool isActive: modelData?.HyprlandToplevel?.address === Hyprland.activeToplevel?.address
+                    z: Drag.active ? root.windowDraggingZ : (root.windowZ + windowData?.floating + windowData?.fullscreen * 2 + (isActive ? 0.5 : 0))
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: window.isActive
+                        color: "transparent"
+                        radius: window.topLeftRadius
+                        border.width: 3
+                        border.color: Appearance.colors.colPrimary
+                        z: 10
+                    }
                     Drag.hotSpot.x: width / 2
                     Drag.hotSpot.y: height / 2
                     MouseArea {
