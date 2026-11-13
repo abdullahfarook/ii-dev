@@ -6,4 +6,5 @@ import Quickshell
 ShellRoot {
     CloseButton {}
     TypeSearch {}
+    FloatWorkspace {}
 }

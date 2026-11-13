@@ -8,6 +8,7 @@ runtime (~175 MB), so every extra shares this one.
 |---|---|---|
 | Close button | `CloseButton.qml` | Drag / maximize / close drawer at the top of windows whose app has no buttons |
 | Type-search | `TypeSearch.qml` | Typing right after switching to an empty workspace opens the launcher search |
+| Float workspace | `FloatWorkspace.qml` | `SUPER+ALT+G` floats every window of the focused workspace and every new one; press again to tile them all |
 
 ## Which home fits
 
