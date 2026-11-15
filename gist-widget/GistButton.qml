@@ -385,10 +385,11 @@ WidgetBase {
         Component.onDestruction: store.stash()   // save the open draft right away instead of 2 s later
 
         // ---- helpers
-        function title(g) { return g.description !== "" ? g.description : (g.files.length ? g.files[0].filename : g.id) }
+        function oneLine(t) { return (t ?? "").split("\n")[0].trim().slice(0, 120) }
+        function title(g) { const t = oneLine(g.description); return t !== "" ? t : (g.files.length ? g.files[0].filename : g.id) }
         function draftTitle(d) {
             const named = d.files.find(f => f.name.trim() !== "");
-            return d.desc.trim() !== "" ? d.desc.trim() : named ? named.name : Translation.tr("Untitled gist");
+            return oneLine(d.desc) !== "" ? oneLine(d.desc) : named ? named.name : Translation.tr("Untitled gist");
         }
         function ago(iso) {
             if (!iso) return "";
@@ -541,6 +542,13 @@ WidgetBase {
             for (let i = 0; i < d.count; i++) {   // the names GitHub will store, so the fields show them too (unnamed = Markdown)
                 const n = d.get(i).name, t = n.trim() !== "" ? n.trim() : `gistfile${i + 1}.md`;
                 if (t !== n) { d.setProperty(i, "name", t); renamed = true; }
+            }
+            if (store.draftDesc.trim().includes("\n")) {   // a description is one line: a pasted block of text is content, not a description
+                const lines = store.draftDesc.trim().split("\n");
+                let k = -1;
+                for (let i = 0; i < d.count; i++) if (!d.get(i).locked && d.get(i).content.trim() === "") { k = i; break; }
+                if (k >= 0) d.setProperty(k, "content", store.draftDesc.trim());
+                store.draftDesc = lines[0].trim().slice(0, 120); renamed = true;
             }
             if (store.draftDesc !== store.draftDesc.trim()) { store.draftDesc = store.draftDesc.trim(); renamed = true; }
             if (renamed) { draftGen++; store.touchDraft(); }
