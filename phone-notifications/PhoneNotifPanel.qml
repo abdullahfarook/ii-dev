@@ -24,6 +24,19 @@ FocusScope {
     property alias historySearchInput: histField.input
 
     readonly property bool filtering: appFilter !== ""
+
+    // Clear all: swipe the cards on screen away top to bottom, then clear (the list keeps its room meanwhile)
+    property bool clearing: false
+    readonly property int swipeMs: 260
+    readonly property int swipeStagger: 55
+    function swipeDelay(item) { return Math.min(10, Math.max(0, Math.floor((item.y - feedView.contentY) / 120))) * swipeStagger }
+    function clearAll() {
+        if (clearing) return;
+        if (feedView.count === 0) { store.post("clear"); return; }
+        clearing = true;
+        clearTimer.restart();
+    }
+    Timer { id: clearTimer; interval: pn.swipeMs + 10 * pn.swipeStagger + 40; onTriggered: { pn.store.post("clear"); pn.clearing = false } }
     function matches(app) { return appFilter === "" || app === appFilter }
     function openRules(app, name) { rulesApp = app || ""; rulesAppName = name || ""; store.loadRules(); mode = "rules" }
     function back() { if (lightbox !== "") lightbox = ""; else mode = "list" }
@@ -249,7 +262,7 @@ FocusScope {
                     }
                 }
             }
-                IconBtn { id: clearAllBtn; Layout.alignment: Qt.AlignTop; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.store.post("clear") }
+                IconBtn { id: clearAllBtn; Layout.alignment: Qt.AlignTop; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.clearAll() }
             }
             // Undo after a dismiss or Clear all
             Rectangle {
@@ -258,7 +271,9 @@ FocusScope {
                 Layout.fillWidth: true
                 implicitHeight: 38; radius: Appearance.rounding.small
                 color: Appearance.colors.colSecondaryContainer
-                Timer { id: undoTimer; interval: 6000; running: undoBar.visible; onTriggered: pn.store.post("undo/clear") }
+                // The undo offer goes away by itself: hide it at once, then tell the server to forget it.
+                Timer { id: undoTimer; interval: 6000; onTriggered: { pn.store.undoLabel = ""; pn.store.post("undo/clear") } }
+                onVisibleChanged: if (visible) undoTimer.restart(); else undoTimer.stop()
                 Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) undoTimer.restart() } }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 4 }
@@ -273,9 +288,17 @@ FocusScope {
                 animateAppearance: false
                 // StyledListView's transitions are empty when animateAppearance is false; an empty remove
                 // transition leaves removed delegates painted (collapsed group cards overlapped the next card)
-                add: null; addDisplaced: null; remove: null; removeDisplaced: null; displaced: null; move: null; moveDisplaced: null
+                // Removals (single dismiss, group clear, Clear all) fade and slide out, then the rest glide up. Each animation ends
+                // with the delegate gone (opacity 0), so nothing stays painted.
+                add: null; addDisplaced: null; move: null; moveDisplaced: null
+                remove: Transition { ParallelAnimation {
+                    NumberAnimation { property: "opacity"; to: 0; duration: 220; easing.type: Easing.InCubic }
+                    NumberAnimation { property: "x"; to: feedView.width * 0.25; duration: 220; easing.type: Easing.InCubic }
+                } }
+                removeDisplaced: Transition { NumberAnimation { property: "y"; duration: 240; easing.type: Easing.OutCubic } }
+                displaced: Transition { NumberAnimation { property: "y"; duration: 240; easing.type: Easing.OutCubic } }
                 Layout.fillWidth: true
-                Layout.fillHeight: !(count === 0 || (pn.filtering && contentHeight < 1))   // empty: give all the room to the centred empty state
+                Layout.fillHeight: pn.clearing || !(count === 0 || (pn.filtering && contentHeight < 1))   // empty: give all the room to the centred empty state
                 clip: true
                 spacing: 0
                 model: pn.store.feed
@@ -293,6 +316,25 @@ FocusScope {
                     onOpenAppRequested: pn.store.openApp(app, appName.length > 0 ? appName : app)
                     onOptionsRequested: pn.openRules(app, appName)
                     onImageClicked: url => pn.lightbox = url
+                    // Clear all: cards swipe off to the right one after another, like Android
+                    transform: Translate { id: sw }
+                    SequentialAnimation {
+                        id: swipeOut
+                        PauseAnimation { duration: pn.swipeDelay(ni) }
+                        ParallelAnimation {
+                            NumberAnimation { target: sw; property: "x"; to: feedView.width; duration: pn.swipeMs; easing.type: Easing.InCubic }
+                            NumberAnimation { target: ni; property: "opacity"; to: 0; duration: pn.swipeMs; easing.type: Easing.InCubic }
+                        }
+                    }
+                    Connections {
+                        target: pn
+                        function onClearingChanged() {
+                            if (pn.clearing && ni.shown && !ongoing) swipeOut.start();
+                            else if (!pn.clearing && (swipeOut.running || sw.x !== 0)) unswipe.restart();
+                        }
+                    }
+                    // a card that was swiped but not removed (ongoing, or the clear failed) comes back; removed ones are gone by then
+                    Timer { id: unswipe; interval: 1000; onTriggered: { swipeOut.stop(); sw.x = 0; ni.opacity = 1 } }
                 }
             }
             // empty states
