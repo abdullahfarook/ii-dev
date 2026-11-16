@@ -295,8 +295,9 @@ FocusScope {
                     NumberAnimation { property: "opacity"; to: 0; duration: 220; easing.type: Easing.InCubic }
                     NumberAnimation { property: "x"; to: feedView.width * 0.25; duration: 220; easing.type: Easing.InCubic }
                 } }
-                removeDisplaced: Transition { NumberAnimation { property: "y"; duration: 240; easing.type: Easing.OutCubic } }
-                displaced: Transition { NumberAnimation { property: "y"; duration: 240; easing.type: Easing.OutCubic } }
+                // No displaced transitions: a feed update (insert/move) landing mid-animation left cards stuck at stale y
+                // positions, stacked on top of each other. Cards snap to their place instead.
+                removeDisplaced: null; displaced: null
                 Layout.fillWidth: true
                 Layout.fillHeight: pn.clearing || !(count === 0 || (pn.filtering && contentHeight < 1))   // empty: give all the room to the centred empty state
                 clip: true
