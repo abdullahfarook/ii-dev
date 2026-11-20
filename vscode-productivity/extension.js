@@ -7,6 +7,7 @@ const cp = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const os = require('os');
 
 const STATE_FILE = 'info/vscode-hidden-changes.json';
 
@@ -315,7 +316,93 @@ async function hideAll(sourceControl) {
   await refresh(repos);
 }
 
+// ---- User Secrets: open a .NET project's secrets.json, like Visual Studio's "Manage User Secrets". ----
+// Same behaviour as the "adrianwilczynski.user-secrets" extension, without its xml2js/uuid dependencies,
+// and it also finds <UserSecretsId> outside the first <PropertyGroup>.
+
+const PROJECT_EXT = /\.(cs|fs|vb)proj$/i;
+const SECRETS_ID = /<UserSecretsId>\s*([^<\s]+)\s*<\/UserSecretsId>/;
+
+function secretsPath(id) {
+  return process.platform === 'win32'
+    ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Microsoft', 'UserSecrets', id, 'secrets.json')
+    : path.join(os.homedir(), '.microsoft', 'usersecrets', id, 'secrets.json');
+}
+
+// Project from the Explorer/editor menu, else the active editor, else the only/picked project in the workspace.
+async function pickProject(uri) {
+  if (uri instanceof vscode.Uri && PROJECT_EXT.test(uri.fsPath)) return uri;
+  const active = vscode.window.activeTextEditor && vscode.window.activeTextEditor.document.uri;
+  if (active && active.scheme === 'file' && PROJECT_EXT.test(active.fsPath)) return active;
+  const found = await vscode.workspace.findFiles('**/*.{csproj,fsproj,vbproj}', '**/{node_modules,bin,obj}/**');
+  if (found.length <= 1) return found[0];
+  const picked = await vscode.window.showQuickPick(
+    found.sort((a, b) => a.fsPath.localeCompare(b.fsPath)).map(u => ({
+      label: path.basename(u.fsPath),
+      description: vscode.workspace.asRelativePath(path.dirname(u.fsPath)),
+      uri: u,
+    })),
+    { placeHolder: 'Open user secrets for which project?', matchOnDescription: true });
+  return picked && picked.uri;
+}
+
+async function confirmAddSecretsId(name) {
+  const config = vscode.workspace.getConfiguration('dotnetUserSecrets');
+  if (!config.get('askBeforeAddingId')) return true;
+  const yes = 'Yes', always = "Yes, Don't Ask Again";
+  const answer = await vscode.window.showWarningMessage(
+    `${name} has no <UserSecretsId>. Add one?`, yes, always);
+  if (answer === always) await config.update('askBeforeAddingId', false, vscode.ConfigurationTarget.Global);
+  return answer === yes || answer === always;
+}
+
+// Insert <UserSecretsId> into the first unconditioned <PropertyGroup>, keeping the file's own indent and line endings.
+function withSecretsId(text, id) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const group = /<PropertyGroup\s*>/.exec(text);
+  if (group) {
+    const at = group.index + group[0].length;
+    const indent = (/^\r?\n([ \t]*)</.exec(text.slice(at)) || [, '    '])[1];
+    return text.slice(0, at) + `${eol}${indent}<UserSecretsId>${id}</UserSecretsId>` + text.slice(at);
+  }
+  const end = text.lastIndexOf('</Project>');
+  if (end < 0) throw new Error('not a project file (no </Project>).');
+  const unit = (/\n([ \t]+)</.exec(text) || [, '  '])[1];
+  return text.slice(0, end) +
+    `${unit}<PropertyGroup>${eol}${unit}${unit}<UserSecretsId>${id}</UserSecretsId>${eol}${unit}</PropertyGroup>${eol}` +
+    text.slice(end);
+}
+
+async function manageUserSecrets(uri) {
+  const project = await pickProject(uri);
+  if (!project) return vscode.window.showWarningMessage('User Secrets: no .csproj found in this workspace.');
+
+  // Go through a TextDocument so unsaved edits are respected and the change is undoable in the editor.
+  const doc = await vscode.workspace.openTextDocument(project);
+  const text = doc.getText();
+  let id = (SECRETS_ID.exec(text) || [])[1];
+
+  if (!id) {
+    if (!(await confirmAddSecretsId(path.basename(project.fsPath)))) return;
+    id = crypto.randomUUID();
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(project, new vscode.Range(doc.positionAt(0), doc.positionAt(text.length)), withSecretsId(text, id));
+    await vscode.workspace.applyEdit(edit);
+    await doc.save();
+  }
+
+  const file = secretsPath(id);
+  if (!fs.existsSync(file)) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `{${os.EOL}${os.EOL}}${os.EOL}`, { mode: 0o600 });
+  }
+  await vscode.window.showTextDocument(vscode.Uri.file(file));
+}
+
 async function activate(context) {
+  context.subscriptions.push(vscode.commands.registerCommand('dotnetUserSecrets.manage', uri =>
+    manageUserSecrets(uri).catch(err => vscode.window.showErrorMessage(`User Secrets: ${err.message}`))));
+
   const ext = vscode.extensions.getExtension('vscode.git');
   if (!ext) return;
   const exports = ext.isActive ? ext.exports : await ext.activate();

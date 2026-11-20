@@ -1,9 +1,9 @@
 {
 	"name": "hidden-changes",
 	"displayName": "Hidden Changes",
-	"description": "Hide local changes to tracked files from Source Control (git skip-worktree), with a per-repo toggle.",
+	"description": "Hide local changes to tracked files from Source Control (git skip-worktree), with a per-repo toggle. Also opens a .NET project's user secrets.json.",
 	"publisher": "local",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"engines": {
 		"vscode": "^1.80.0"
 	},
@@ -38,6 +38,12 @@
 				"title": "Hide Files Again",
 				"category": "Hidden Changes",
 				"icon": "$(eye-closed)"
+			},
+			{
+				"command": "dotnetUserSecrets.manage",
+				"title": "Manage User Secrets",
+				"category": "User Secrets",
+				"icon": "$(key)"
 			}
 		],
 		"menus": {
@@ -71,6 +77,20 @@
 					"when": "scmProvider == git && scmProviderRootUri in hiddenChanges.canHide",
 					"group": "navigation@-1"
 				}
+			],
+			"explorer/context": [
+				{
+					"command": "dotnetUserSecrets.manage",
+					"when": "resourceScheme == file && resourceExtname =~ /^\\.(cs|fs|vb)proj$/",
+					"group": "7_modification@9"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "dotnetUserSecrets.manage",
+					"when": "resourceScheme == file && resourceExtname =~ /^\\.(cs|fs|vb)proj$/",
+					"group": "1_open@9"
+				}
 			]
 		},
 		"configuration": {
@@ -80,6 +100,11 @@
 					"type": "boolean",
 					"default": true,
 					"description": "When a hidden file changes again after it was hidden, unhide it so it appears in Source Control."
+				},
+				"dotnetUserSecrets.askBeforeAddingId": {
+					"type": "boolean",
+					"default": true,
+					"description": "Ask before adding a generated <UserSecretsId> to a project file that has none."
 				}
 			}
 		}
