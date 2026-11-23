@@ -6,6 +6,8 @@ F="$HOME/.config/quickshell/ii/modules/common/utils/ScreenshotAction.qml"
 B="$HOME/backups/snip-edit/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$F" "$B/"
 command -v satty >/dev/null || pkexec pacman -S --noconfirm satty
 install -Dm755 "$REPO/snip-edit.sh" "$HOME/.config/hypr/custom/snip-edit.sh"
+[[ -f "$HOME/.config/satty/config.toml" ]] && cp "$HOME/.config/satty/config.toml" "$B/"
+install -Dm644 "$REPO/satty-config.toml" "$HOME/.config/satty/config.toml"
 python3 - "$F" <<'PY'
 import sys
 p = sys.argv[1]; s = open(p).read()

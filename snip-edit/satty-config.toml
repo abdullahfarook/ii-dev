@@ -1,0 +1,11 @@
+# Satty defaults for snip-edit: red is the first (= default) colour.
+[color-palette]
+palette = [
+    "#e53935ff",  # red (default)
+    "#f0932bff",
+    "#fdd835ff",
+    "#6ab04cff",
+    "#1e88e5ff",
+    "#130f40ff",
+    "#ffffffff",
+]
