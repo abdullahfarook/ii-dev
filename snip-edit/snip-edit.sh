@@ -11,7 +11,7 @@ dbus-monitor --session "type='signal',interface='org.freedesktop.Notifications'"
 sleep 0.3
 id=$(gdbus call --session --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
      --method org.freedesktop.Notifications.Notify Screenshot 0 "$img" "Screenshot copied" \
-     "Click Edit to draw, add text or crop" "['edit','Edit']" "{}" 6000 | grep -o '[0-9]\+' | head -1)
+     "Click Edit to draw, add text or crop" "['edit','Edit']" "{}" 6000 | sed -n 's/.*uint32 \([0-9]*\).*/\1/p')
 [[ -n "$id" ]] || exit 1
 for ((i = 0; i < 3600; i++)); do
     # ActionInvoked: "uint32 <id>" then 'string "edit"'
