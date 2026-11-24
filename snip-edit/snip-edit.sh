@@ -17,7 +17,7 @@ for ((i = 0; i < 3600; i++)); do
     # ActionInvoked: "uint32 <id>" then 'string "edit"'
     if grep -A1 "member=ActionInvoked" "$log" | grep -q "uint32 $id$"; then
         out=(); [[ $tmp == 0 ]] && out=(-o "${img%.png}-edited.png")
-        satty -f "$img" --copy-command wl-copy --early-exit copy --initial-tool arrow \
+        satty -f "$img" --copy-command wl-copy --early-exit copy --initial-tool arrow --disable-notifications \
               --actions-on-enter save-to-clipboard --actions-on-escape exit "${out[@]}"
         break
     fi
