@@ -70,7 +70,7 @@ class H(BaseHTTPRequestHandler):
         elif p.endswith("/dismiss-group"):
             gone=[i for i in STATE["items"] if i["app"]==b.get("app") and not i["ongoing"]]
             STATE["items"]=[i for i in STATE["items"] if i not in gone]; STATE["last"]=gone; STATE["undo"]="Dismissed %d from %s"%(len(gone),b.get("app"))
-        elif p.endswith("/clear"):
+        elif p.endswith("/clear") and not p.endswith("/undo/clear"):
             gone=[i for i in STATE["items"] if not i["ongoing"]]
             STATE["items"]=[i for i in STATE["items"] if i["ongoing"]]; STATE["last"]=gone; STATE["undo"]="Dismissed %d notifications"%len(gone)
         elif p.endswith("/undo"):

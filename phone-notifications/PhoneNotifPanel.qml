@@ -244,7 +244,10 @@ FocusScope {
             }
             Rectangle { visible: pn.mode === "list" && pn.store.connected; Layout.fillWidth: true; implicitHeight: 1; color: Appearance.colors.colOutlineVariant }
             RowLayout {
-                visible: pn.mode === "list" && pn.store.connected && pn.store.count > 0
+                visible: pn.mode === "list" && pn.store.connected
+                opacity: pn.store.count > 0 ? 1 : 0
+                enabled: pn.store.count > 0
+                Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Layout.fillWidth: true
                 spacing: 4
             Flow {
@@ -263,32 +266,6 @@ FocusScope {
                 }
             }
                 IconBtn { id: clearAllBtn; Layout.alignment: Qt.AlignTop; symbol: "clear_all"; tip: qsTr("Clear all"); onClicked: pn.clearAll() }
-            }
-            // Undo after a dismiss or Clear all
-            Rectangle {
-                id: undoBar
-                // shown while there is something to undo; fades and collapses (no pop) when it times out or is used
-                readonly property bool shown: pn.mode === "list" && pn.store.undoLabel.length > 0
-                property string lastLabel: ""
-                onShownChanged: if (shown) { lastLabel = pn.store.undoLabel; undoTimer.restart() } else undoTimer.stop()
-                visible: opacity > 0.01 || shown
-                opacity: shown ? 1 : 0
-                clip: true
-                Layout.fillWidth: true
-                Layout.preferredHeight: shown ? 38 : 0
-                implicitHeight: 38; radius: Appearance.rounding.small
-                color: Appearance.colors.colSecondaryContainer
-                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                Behavior on Layout.preferredHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                // The undo offer goes away by itself after 4 s: fade it out, then tell the server to forget it.
-                Timer { id: undoTimer; interval: 4000; onTriggered: { pn.store.undoLabel = ""; pn.store.post("undo/clear") } }
-                Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) { undoBar.lastLabel = pn.store.undoLabel; undoTimer.restart() } } }
-                RowLayout {
-                    anchors { fill: parent; leftMargin: 12; rightMargin: 4 }
-                    StyledText { Layout.fillWidth: true; text: pn.store.undoLabel.length > 0 ? pn.store.undoLabel : undoBar.lastLabel; elide: Text.ElideRight; color: Appearance.colors.colOnSecondaryContainer }
-                    Chip { id: undoBtn; label: qsTr("Undo"); active: true; onClicked: pn.store.post("undo") }
-                    IconBtn { symbol: "close"; tip: qsTr("Dismiss"); onClicked: pn.store.post("undo/clear") }
-                }
             }
             StyledListView {
                 id: feedView
@@ -481,6 +458,49 @@ FocusScope {
                     : qsTr("Esc goes back")
                 font.pixelSize: Appearance.font.pixelSize.smallest
                 color: Appearance.colors.colSubtext
+            }
+        }
+
+        // ---- Undo snackbar after a dismiss or Clear all: floats over the bottom, slides up, never moves the layout ----
+        Rectangle {
+            id: undoBar
+            readonly property bool shown: pn.mode === "list" && pn.store.undoLabel.length > 0
+            property string lastLabel: ""
+            onShownChanged: if (shown) { lastLabel = pn.store.undoLabel; undoTimer.restart() } else undoTimer.stop()
+            z: 50
+            visible: opacity > 0.01
+            opacity: shown ? 1 : 0
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 16 }
+            anchors.bottomMargin: shown ? 40 : 16
+            implicitHeight: 44
+            radius: 22
+            color: Appearance.m3colors.m3inverseSurface
+            Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+            Behavior on anchors.bottomMargin { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            // goes away by itself after 5 s (paused while hovered), then the server forgets the undo
+            Timer { id: undoTimer; interval: 5000; onTriggered: { pn.store.undoLabel = ""; pn.store.post("undo/clear") } }
+            Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) { undoBar.lastLabel = pn.store.undoLabel; undoTimer.restart() } } }
+            HoverHandler { onHoveredChanged: if (hovered) undoTimer.stop(); else if (undoBar.shown) undoTimer.restart() }
+            RowLayout {
+                anchors { fill: parent; leftMargin: 18; rightMargin: 6 }
+                spacing: 4
+                StyledText { Layout.fillWidth: true; text: pn.store.undoLabel.length > 0 ? pn.store.undoLabel : undoBar.lastLabel; elide: Text.ElideRight; color: Appearance.m3colors.m3inverseOnSurface }
+                RippleButton {
+                    implicitWidth: undoTxt.implicitWidth + 24; implicitHeight: 32
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.08)
+                    onClicked: pn.store.post("undo")
+                    contentItem: StyledText { id: undoTxt; text: qsTr("Undo"); horizontalAlignment: Text.AlignHCenter; font.weight: Font.Medium; color: Appearance.m3colors.m3inversePrimary }
+                }
+                RippleButton {
+                    implicitWidth: 32; implicitHeight: 32
+                    buttonRadius: Appearance.rounding.full
+                    colBackground: "transparent"
+                    colBackgroundHover: Qt.rgba(1, 1, 1, 0.08)
+                    onClicked: { pn.store.undoLabel = ""; pn.store.post("undo/clear") }
+                    contentItem: MaterialSymbol { text: "close"; iconSize: 18; horizontalAlignment: Text.AlignHCenter; color: Appearance.m3colors.m3inverseOnSurface }
+                }
             }
         }
 
