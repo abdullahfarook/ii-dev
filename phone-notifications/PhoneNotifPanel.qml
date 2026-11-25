@@ -267,17 +267,25 @@ FocusScope {
             // Undo after a dismiss or Clear all
             Rectangle {
                 id: undoBar
-                visible: pn.mode === "list" && pn.store.undoLabel.length > 0
+                // shown while there is something to undo; fades and collapses (no pop) when it times out or is used
+                readonly property bool shown: pn.mode === "list" && pn.store.undoLabel.length > 0
+                property string lastLabel: ""
+                onShownChanged: if (shown) { lastLabel = pn.store.undoLabel; undoTimer.restart() } else undoTimer.stop()
+                visible: opacity > 0.01 || shown
+                opacity: shown ? 1 : 0
+                clip: true
                 Layout.fillWidth: true
+                Layout.preferredHeight: shown ? 38 : 0
                 implicitHeight: 38; radius: Appearance.rounding.small
                 color: Appearance.colors.colSecondaryContainer
-                // The undo offer goes away by itself: hide it at once, then tell the server to forget it.
-                Timer { id: undoTimer; interval: 6000; onTriggered: { pn.store.undoLabel = ""; pn.store.post("undo/clear") } }
-                onVisibleChanged: if (visible) undoTimer.restart(); else undoTimer.stop()
-                Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) undoTimer.restart() } }
+                Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                // The undo offer goes away by itself after 4 s: fade it out, then tell the server to forget it.
+                Timer { id: undoTimer; interval: 4000; onTriggered: { pn.store.undoLabel = ""; pn.store.post("undo/clear") } }
+                Connections { target: pn.store; function onUndoLabelChanged() { if (pn.store.undoLabel.length > 0) { undoBar.lastLabel = pn.store.undoLabel; undoTimer.restart() } } }
                 RowLayout {
                     anchors { fill: parent; leftMargin: 12; rightMargin: 4 }
-                    StyledText { Layout.fillWidth: true; text: pn.store.undoLabel; elide: Text.ElideRight; color: Appearance.colors.colOnSecondaryContainer }
+                    StyledText { Layout.fillWidth: true; text: pn.store.undoLabel.length > 0 ? pn.store.undoLabel : undoBar.lastLabel; elide: Text.ElideRight; color: Appearance.colors.colOnSecondaryContainer }
                     Chip { id: undoBtn; label: qsTr("Undo"); active: true; onClicked: pn.store.post("undo") }
                     IconBtn { symbol: "close"; tip: qsTr("Dismiss"); onClicked: pn.store.post("undo/clear") }
                 }
@@ -340,7 +348,12 @@ FocusScope {
             }
             // empty states
             Item {
-                visible: pn.mode === "list" && (feedView.count === 0 || (pn.filtering && feedView.contentHeight < 1))
+                id: emptyState
+                readonly property bool want: pn.mode === "list" && !pn.clearing && (feedView.count === 0 || (pn.filtering && feedView.contentHeight < 1))
+                visible: want
+                opacity: 0
+                onWantChanged: if (want) fadeIn.restart(); else opacity = 0
+                NumberAnimation { id: fadeIn; target: emptyState; property: "opacity"; from: 0; to: 1; duration: 320; easing.type: Easing.OutCubic }
                 Layout.fillWidth: true; Layout.fillHeight: true
                 ColumnLayout {
                     anchors.centerIn: parent
