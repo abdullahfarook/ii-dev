@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ALT+Tab: Windows-style MRU workspace switcher with overview (safe to run repeatedly).
+# ALT+Tab: Windows-style MRU window switcher with overview (safe to run repeatedly).
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
 KEYBINDS="$HOME/.config/hypr/custom/keybinds.lua"
@@ -19,5 +19,6 @@ PY
 OV="$HOME/.config/quickshell/ii/modules/ii/overview/OverviewWidget.qml"
 B="$HOME/backups/super-tab/$(date +%Y%m%d-%H%M%S)"; mkdir -p "$B"; cp "$OV" "$B/"
 python3 "$REPO/patch-overview.py" "$OV"
-pgrep -f ws-mru-watch.sh >/dev/null || { nohup "$HOME/.config/hypr/custom/ws-mru-watch.sh" >/dev/null 2>&1 & disown; }
+pkill -f "[w]s-mru-watch.sh" || true; sleep 0.2  # restart it, so a changed watcher takes effect
+{ nohup "$HOME/.config/hypr/custom/ws-mru-watch.sh" >/dev/null 2>&1 & disown; }
 echo "Installed. Hyprland reloads automatically; if not: hyprctl reload"

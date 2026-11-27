@@ -5,7 +5,7 @@ This repo is the source of truth; `install.sh` in each folder applies it to the 
 
 | Folder | What it does | Applies to |
 |---|---|---|
-| `super-tab/` | Windows-style ALT+Tab on workspaces (most-recently-used order: tap = previous, hold + Tab = further back, Shift+Tab = forward), shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
+| `super-tab/` | Windows-style ALT+Tab on windows across all workspaces (most-recently-used order: tap = previous window, hold + Tab = further back, Shift+Tab = forward), shows the overview; releasing ALT closes it; SUPER+click on previews works | `~/.config/hypr/custom/` (keybinds.lua + scripts) |
 | `dolphin-menu/` | Dolphin right-click: "Open in Claude" (kitty + claude) and "Open in VS Code" on folders | `~/.local/share/kio/servicemenus/` |
 | `ai-sidebar/` | Optional left sidebar backend: native Intelligence panel, or kitty running Claude Code / Codex (Settings → Services → AI) | `~/.config/quickshell/ii/` (Config + Settings patch), `~/.config/hypr/custom/` (script + SUPER+A/B/O) |
 | `vscode-git/` | Git panel: bar button (next to the AI button) or SUPER+Z toggles a dedicated minimal VS Code (own profile in `~/.local/share/vscode-git`; Source Control + diff only, no activity/status/title bar) as a left-docked floating panel on `special:vgit`, closes on outside click. Repos shown are listed in `~/.local/share/vscode-git/ws/git-panel.code-workspace` | `~/.config/quickshell/ii/` (BarContent patch + button), `~/.config/hypr/custom/` (scripts + keybind/rules), `~/.local/share/vscode-git/` |
@@ -46,8 +46,8 @@ Installers are idempotent: keybind snippets live between `-- >>> name >>>` / `--
 ## super-tab internals
 
 - Hyprland here uses the **Lua config**. Legacy dispatch syntax fails; use e.g. `hyprctl dispatch 'hl.dsp.focus({ workspace = "e+1" })'`.
-- `super-tab.sh`: sets a flag file, enters the `super-tab` submap, goes to the next workspace in MRU order (list snapshotted from `ws-mru-watch.sh`'s history file at session start), opens the overview (`qs -c ii ipc call search open`) if the `quickshell:overview` layer is absent.
-- `ws-mru-watch.sh`: single-instance socket2 listener recording workspace focus history in `$XDG_RUNTIME_DIR/ws-mru` (ignores changes during an ALT+Tab session; the release script records the final workspace). Autostarted from the keybind snippet via `hyprland.start`.
+- `super-tab.sh`: sets a flag file, enters the `super-tab` submap, goes to the next window in MRU order (list snapshotted at session start from `ws-mru-watch.sh`'s history, plus windows it never saw in Hyprland's focus order), opens the overview (`qs -c ii ipc call search open`) if the `quickshell:overview` layer is absent.
+- `ws-mru-watch.sh`: single-instance socket2 listener recording window focus history in `$XDG_RUNTIME_DIR/win-mru`. A window counts only after 0.3s of focus, because Hyprland briefly focuses a workspace's last window when you jump to another window on it (so its own `focusHistoryID` order gets polluted). Ignores changes during an ALT+Tab session; the release script records the chosen window. Autostarted from the keybind snippet via `hyprland.start`.
 - `super-tab-release.sh`: on ALT release (only if the flag exists) resets the submap, waits 0.15s so the shell's own release handler runs first, then closes the overview.
 - The submap exists because `SUPER+mouse:272` is bound to window-move, which swallows clicks on overview previews while SUPER is held (SUPER+click on previews). Inside the submap that bind is absent. Side effect: other shortcuts defined outside the submap are inactive until ALT is released.
 - `super-tab/lua/` is an alternative, pure-Lua implementation (history via `hl.on("workspace.active")`, no watcher or scripts). Install one or the other, not both: each `install.sh` removes/replaces the other's snippet block, but the Lua one also deletes the helper scripts.
