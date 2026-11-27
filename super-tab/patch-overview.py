@@ -95,7 +95,7 @@ if "super-tab: float app icons v5" not in s:
                                         Hyprland.dispatch(`hl.dsp.window.alter_zorder({ mode = 'top', window = 'address:${fIcon.modelData.address}' })`)
                                     }
                                 }
-                                StyledToolTip { text: fIcon.modelData.title }
+                                StyledToolTip { extraVisibleCondition: false; alternativeVisibleCondition: fMa.containsMouse; text: fIcon.modelData.title }
                             }
                         }
                     }
