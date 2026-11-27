@@ -118,9 +118,38 @@ if "super-tab: float preview only focused" not in s:
 ''', 1)
     open(p, "w").write(s)
 
+# --- v3c: ... or, when the focus is elsewhere, that workspace's last used window (it showed nothing before) ---
+s = open(p).read()
+old = "                    visible: isActive || !(wsAll.length > 1 && wsAll.every(w => w.floating))\n"
+if old in s:
+    s = s.replace(old, """                    // super-tab: float preview v3c: the focused window, else the workspace's most recently used one
+                    readonly property bool wsLatest: wsAll.every(w => (w.focusHistoryID ?? 0) >= (windowData?.focusHistoryID ?? 0))
+                    visible: isActive || wsLatest || !(wsAll.length > 1 && wsAll.every(w => w.floating))
+""", 1)
+    open(p, "w").write(s)
+
 # --- v4: the window preview already shows the app icon; drop the extra big icon on the focused workspace ---
 s = open(p).read()
 old = "visible: act !== undefined && act.workspace.id === root.effectiveActiveWorkspaceId && wsWins.length > 1 && wsWins.every(w => w.floating)"
 if old in s:
     s = s.replace(old, "visible: false  // super-tab: the window preview has its own icon; the tray highlights the selection")
     open(p, "w").write(s)
+
+# --- v5: on float-mode workspaces the shown window fills the whole workspace preview ---
+s = open(p).read()
+if "super-tab: float fill v5" not in s:
+    a = "                    visible: isActive || wsLatest || !(wsAll.length > 1 && wsAll.every(w => w.floating))\n"
+    assert a in s, "v3c visible line not found"
+    s = s.replace(a, a + """                    // super-tab: float fill v5: on float-mode workspaces the shown window fills the preview
+                    readonly property bool floatFill: wsAll.length > 1 && wsAll.every(w => w.floating)
+                    initX: floatFill ? xOffset : Math.max((windowData?.at[0] - (monitorData?.x ?? 0) - monitorData?.reserved[0]) * widthRatio * root.scale, 0) + xOffset
+                    initY: floatFill ? yOffset : Math.max((windowData?.at[1] - (monitorData?.y ?? 0) - monitorData?.reserved[1]) * heightRatio * root.scale, 0) + yOffset
+                    targetWindowWidth: floatFill ? root.workspaceImplicitWidth : windowData?.size[0] * scale * widthRatio
+                    targetWindowHeight: floatFill ? root.workspaceImplicitHeight : windowData?.size[1] * scale * heightRatio
+""", 1)
+    old = "                    property real xWithinWorkspaceWidget: Math.max("
+    assert old in s
+    s = s.replace(old, "                    property real xWithinWorkspaceWidget: floatFill ? 0 : Math.max(", 1)
+    s = s.replace("                    property real yWithinWorkspaceWidget: Math.max(", "                    property real yWithinWorkspaceWidget: floatFill ? 0 : Math.max(", 1)
+    open(p, "w").write(s)
+
